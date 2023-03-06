@@ -337,9 +337,17 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	for(int i=0; i<n; i++) {
 	    nct_var* vardim = src->super->dims[src->dimids[i]];
 	    dimids[i] = nct_get_dimid(dest, vardim->name);
+	    /* Create the dimension if not present in dest. */
 	    if (dimids[i] < 0) {
 	    	nct_var* dim = nct_add_dim(dest, vardim->len, strdup(vardim->name));
 		dim->freeable_name = 1;
+		dimids[i] = dim->id;
+	    }
+	    /* Create a new dimension if lengths mismatch in source and destination. */
+	    else if (dest->dims[dimids[i]]->len != vardim->len) {
+		nct_var* dim = nct_add_dim(dest, vardim->len, strdup(vardim->name));
+		dim->freeable_name = 1;
+		nct_ensure_unique_name(dim);
 		dimids[i] = dim->id;
 	    }
 	}
@@ -438,14 +446,21 @@ failed:
     return_error(NULL);
 }
 
-nct_var* nct_drop_vardim_first(nct_var* var) {
-    size_t new_len = nct_get_len_from(var, 1);
-    if (!cannot_free(var))
+nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
+    size_t new_len = var->len / var->super->dims[var->dimids[dim]]->len;
+    if (shrink && !cannot_free(var)) {
 	var->data = realloc(var->data, new_len*nctypelen(var->dtype));
+	var->capacity = new_len;
+    }
     var->len = new_len;
     int* ptr = var->dimids;
-    memmove(ptr, ptr+1, --var->ndims*sizeof(int));
+    int new_ndims = --var->ndims;
+    memmove(ptr+dim, ptr+dim+1, new_ndims*sizeof(int)-dim);
     return var;
+}
+
+nct_var* nct_drop_vardim_first(nct_var* var) {
+    return nct_drop_vardim(var, 0, 1);
 }
 
 nct_var* nct_ensure_unique_name(nct_var* var) {
@@ -787,6 +802,19 @@ nct_anyd nct_mktime0(const nct_var* var, struct tm* timetm) {
 			  .tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};
 
     return (nct_anyd){.a.t=mktime(timetm), .d=ui};
+}
+
+/* Quickly implemented and ungood method. */
+nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
+    FILE* stderr0 = nct_stderr;
+    int act0 = nct_error_action;
+    nct_stderr = fopen("/dev/null", "a");
+    nct_error_action = nct_pass;
+    nct_anyd result = nct_mktime0(var, tm);
+    fclose(nct_stderr);
+    nct_stderr = stderr0;
+    nct_error_action = act0;
+    return result;
 }
 
 void nct_print_var(const nct_var* var, const char* indent) {

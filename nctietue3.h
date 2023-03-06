@@ -121,11 +121,14 @@ nct_set* _nct_create_simple_gd(nct_set* s, void* dt, int dtype, ...);
 
 nct_var* nct_dim2coord(nct_var*, void*, nc_type);
 
-/* Nothing is calculated.
-   The first dimension is just simply dropped
-   meaning that only the index 0 in that dimension is in the data anymore.
-   This is used for example in nct_mean_first after calculating the mean. */
-nct_var* nct_drop_vardim_first(nct_var*);
+/* Nothing is calculated nor data moved.
+   The dimension is just simply dropped.
+   This is used after doing something else,
+   for example in nct_mean_first after calculating the mean.
+   Argument shrink tells whether to realloc to the smaller size if possible.
+   */
+nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink);
+nct_var* nct_drop_vardim_first(nct_var*) __THROW __attribute__((deprecated));
 
 /* If name is not unique, uses nct_find_unique_name_from to replace it. */
 nct_var* nct_ensure_unique_name(nct_var* var);
@@ -189,6 +192,7 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t i
  */
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
 #define nct_mktime0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
+nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is not an error in this function.
 
 void nct_print_var(const nct_var*, const char* indent);
 void nct_print_dim(const nct_var*, const char* indent);

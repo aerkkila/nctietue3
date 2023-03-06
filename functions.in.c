@@ -146,7 +146,7 @@ nct_var* nct_mean_first_@nctype(nct_var* var) {
 	    ((ctype*)var->data)[i] += ((ctype*)var->data)[i+new_len*j];
 	((ctype*)var->data)[i] /= zerolen;
     }
-    return nct_drop_vardim_first(var);
+    return nct_drop_vardim(var, 0, 1);
 }
 
 nct_var* nct_meannan_first_@nctype(nct_var* var) {
@@ -165,7 +165,7 @@ nct_var* nct_meannan_first_@nctype(nct_var* var) {
 	}
 	((ctype*)var->data)[i] = new_value/count;
     }
-    return nct_drop_vardim_first(var);
+    return nct_drop_vardim(var, 0, 1);
 #else
     return nct_mean_first_@nctype(var);
 #endif
