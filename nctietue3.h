@@ -103,6 +103,8 @@ struct nct_anyd {
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 		     int ndims, int* dimids);
+/* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
+nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
 void nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);

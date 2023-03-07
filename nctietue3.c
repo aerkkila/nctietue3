@@ -168,7 +168,18 @@ failed:
     startpass;
     nct_puterror("(re/m)alloc failed in nct_add_var: %s\n", strerror(errno));
     return_error(NULL);
-    endpass;
+    endpass; // TODO: this is never reached which is a bug
+}
+
+nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name) {
+    int ndims = set->ndims;
+    if (ndims <= 5) {
+	int dimids[] = {0,1,2,3,4};
+	return nct_add_var(set, src, dtype, name, ndims, dimids); }
+    int dimids[ndims];
+    for(int i=0; i<ndims; i++)
+	dimids[i] = i;
+    return nct_add_var(set, src, dtype, name, ndims, dimids);
 }
 
 void nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable) {
