@@ -262,6 +262,8 @@ nct_set* nct_read_mfnc_ptr(const char* filename, int n, char* concatdim);
 nct_set* nct_read_mfnc_regex_gd(nct_set* s0, const char* filename, int regex_cflags, char* concatdim);
 nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, char* concatdim);
 
+nct_var* nct_rename(nct_var*, char*, int freeable);
+
 /* This frees the data unless used by another variable (see nct_copy_var) or flagged as not_freeable.
  * Can be used to limit RAM usage:
  *      nct_readmf(set, "some.nc", nct_rlazy);

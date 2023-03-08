@@ -1007,6 +1007,14 @@ nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, c
     return vs0;
 }
 
+nct_var* nct_rename(nct_var* var, char* name, int freeable) {
+    if (var->freeable_name)
+	free(var->name);
+    var->name = name;
+    var->freeable_name = freeable;
+    return var;
+}
+
 void nct_unlink_data(nct_var* var) {
     if (!cannot_free(var))
 	free(var->data);
