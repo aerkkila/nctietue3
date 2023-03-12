@@ -74,6 +74,8 @@
 enum {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 #define TIMEUNITS TIMEUNIT(milliseconds) TIMEUNIT(seconds) TIMEUNIT(minutes) TIMEUNIT(hours) TIMEUNIT(days)
 
+static int timecoeff[] = {0, 1, 60, 3600, 84600};
+
 #define ONE_TYPE(nctype,b,ctype) [nctype] = #ctype,
 static const char* const nct_typenames[] = { ALL_TYPES };
 #undef ONE_TYPE
@@ -114,6 +116,21 @@ void* nct_getfun[] = {
     [NC_UINT]   = nc_get_var_uint,
     [NC_INT64]  = nc_get_var_longlong,
     [NC_UINT64] = nc_get_var_ulonglong,
+};
+
+void* nct_getfun_partial[] = {
+    [NC_NAT]    = nc_get_vara,
+    [NC_BYTE]   = nc_get_vara_schar,
+    [NC_CHAR]   = nc_get_vara_schar,
+    [NC_SHORT]  = nc_get_vara_short,
+    [NC_INT]    = nc_get_vara_int,
+    [NC_FLOAT]  = nc_get_vara_float,
+    [NC_DOUBLE] = nc_get_vara_double,
+    [NC_UBYTE]  = nc_get_vara_uchar,
+    [NC_USHORT] = nc_get_vara_ushort,
+    [NC_UINT]   = nc_get_vara_uint,
+    [NC_INT64]  = nc_get_vara_longlong,
+    [NC_UINT64] = nc_get_vara_ulonglong,
 };
 
 #include "internals.h"
@@ -660,6 +677,14 @@ char* nct_get_varatt_text(const nct_var* var, const char* name) {
     return NULL;
 }
 
+int nct_get_vardimid(const nct_var* restrict var, int dimid) {
+    dimid = nct_id(dimid);
+    for(int i=0; i<var->ndims; i++)
+	if (var->dimids[i] == dimid)
+	    return i;
+    return -1;
+}
+
 int nct_get_varid(const nct_set* restrict set, const char* restrict name) {
     int nvars = set->nvars;
     for(int i=0; i<nvars; i++)
@@ -681,6 +706,48 @@ size_t nct_get_len_from(const nct_var* var, int start) {
     for (int i=start; i<var->ndims; i++)
 	len *= var->super->dims[var->dimids[i]]->len;
     return len;
+}
+
+int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit) {
+    char* units = nct_get_varatt_text(var, "units");
+    *timeunit = -1; // will be overwritten on success
+    if(!units) {
+	nct_puterror("timevariable \"%s\" doesn't have attribute \"units\"\n", var->name);
+	return 1; }
+    int ui;
+
+    /* "units" has form "hours since 2012-05-19" */
+
+    for(ui=0; ui<nct_len_timeunits; ui++)
+	if(!strncmp(units, nct_timeunits[ui], strlen(nct_timeunits[ui])))
+	    break;
+    if(ui == nct_len_timeunits) {
+	nct_puterror("unknown timeunit \"%s\"\n", units);
+	return 1; }
+
+    units += strlen(nct_timeunits[ui]);
+    int year, month, day, hms[3]={0}, len;
+    for(; *units; units++)
+	if('0' <= *units && *units <= '9') {
+	    if(sscanf(units, "%d-%d-%d%n", &year, &month, &day, &len) != 3) {
+		nct_puterror("Could not read %s since WHEN (%s)", nct_timeunits[ui], units);
+		return 1; }
+	    break;
+	}
+    units += len;
+
+    /* Optionally read hours, minutes, seconds. */
+    for(int i=0; i<3 && *units; i++) {
+	if(sscanf(units, "%2d", hms+i) != 1)
+	    break;
+	units += 2;
+	while(*units && !('0' <= *units && *units <= '9')) units++;
+    }
+    *timetm = (struct tm){.tm_year=year-1900, .tm_mon=month-1, .tm_mday=day,
+			  .tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};
+    if (timeunit)
+	*timeunit = ui;
+    return 0;
 }
 
 int nct_link_data(nct_var* dest, nct_var* src) {
@@ -719,9 +786,28 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 	    var->capacity *= nctypelen(dtype) / nctypelen(var->dtype);
 	var->dtype = dtype;
     }
-    nct_ncget_t getdata = nct_getfun[dtype];
     nct_allocate_varmem(var);
-    ncfunk(getdata, var->super->ncid, var->ncid, var->data);
+    
+    if (!(var->rules & 1<<nctrule_start)) {
+	nct_ncget_t getdata = nct_getfun[dtype];
+	ncfunk(getdata, var->super->ncid, var->ncid, var->data);
+	return var;
+    }
+
+    int ndims = var->ndims;
+    int vardimid = __nct_vardimid_from_startrule(var->a[nctrule_start]);
+    size_t offset = __nct_offset_from_startrule(var->a[nctrule_start]);
+    nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
+
+    size_t start[ndims];
+    memset(start, 0, ndims*sizeof(size_t));
+    start[vardimid] = offset;
+
+    size_t count[ndims];
+    for(int i=0; i<ndims; i++)
+	count[i] = var->super->dims[var->dimids[i]]->len;
+
+    ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
     return var;
 }
 
@@ -773,58 +859,23 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* timetm, nct_anyd* epoch, size
 }
 
 nct_anyd nct_mktime0(const nct_var* var, struct tm* timetm) {
-    char* units = nct_get_varatt_text(var, "units");
-    if(!units) {
-	nct_puterror("timevariable \"%s\" has no attribute \"units\"\n", var->name);
-	return_error((nct_anyd){.d = -1}); }
-    int ui;
-
-    /* "units" has form "hours since 2012-05-19" */
-
-    for(ui=0; ui<nct_len_timeunits; ui++)
-	if(!strncmp(units, nct_timeunits[ui], strlen(nct_timeunits[ui])))
-	    break;
-    if(ui == nct_len_timeunits) {
-	nct_puterror("unknown timeunit \"%s\"\n", units);
-	return_error((nct_anyd){.d = -1}); }
-
-    units += strlen(nct_timeunits[ui]);
-    int year, month, day, hms[3]={0}, len;
-    for(; *units; units++)
-	if('0' <= *units && *units <= '9') {
-	    if(sscanf(units, "%d-%d-%d%n", &year, &month, &day, &len) != 3) {
-		nct_puterror("Could not read %s since WHEN (%s)", nct_timeunits[ui], units);
-		return_error((nct_anyd){.d = -1}); }
-	    break;
-	}
-    units += len;
-
-    /* Optionally read hours, minutes, seconds. */
-    for(int i=0; i<3 && *units; i++) {
-	if(sscanf(units, "%2d", hms+i) != 1)
-	    break;
-	units += 2;
-	while(*units && !('0' <= *units && *units <= '9')) units++;
-    }
     struct tm tm_;
+    int ui;
     if(!timetm)
 	timetm = &tm_;
-    *timetm = (struct tm){.tm_year=year-1900, .tm_mon=month-1, .tm_mday=day,
-			  .tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};
-
+    nct_interpret_timeunit(var, timetm, &ui);
     return (nct_anyd){.a.t=mktime(timetm), .d=ui};
 }
 
-/* Quickly implemented and ungood method. */
 nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     FILE* stderr0 = nct_stderr;
-    int act0 = nct_error_action;
+    //int act0 = nct_error_action;
     nct_stderr = fopen("/dev/null", "a");
-    nct_error_action = nct_pass;
+    //nct_error_action = nct_pass;
     nct_anyd result = nct_mktime0(var, tm);
     fclose(nct_stderr);
     nct_stderr = stderr0;
-    nct_error_action = act0;
+    //nct_error_action = act0;
     return result;
 }
 
@@ -1013,6 +1064,42 @@ nct_var* nct_rename(nct_var* var, char* name, int freeable) {
     var->name = name;
     var->freeable_name = freeable;
     return var;
+}
+
+nct_var* nct_set_start(nct_var* coord, int offset) {
+    int size = nctypelen(coord->dtype);
+    if (coord->data)
+	memmove(coord->data, coord->data+offset*size, (coord->len-offset)*size);
+    else
+	_nct_setrule_start(coord, 0, offset);
+    coord->len -= offset;
+
+    /* Each variable has to be edited according to the chance in this coordinate. */
+    nct_foreach(coord->super, var) {
+	int dimid = nct_get_vardimid(var, coord->id);
+	if (dimid < 0)
+	    continue;
+	if (var->data)
+	    //_nct_select(var, dimid, offset, offset+coord->len);
+	    puts("Set the start before loading the variable or implement _nct_select");
+	else
+	    _nct_setrule_start(var, dimid, offset);
+    }
+    return coord;
+}
+
+time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
+    struct tm tm1, tm0;
+    int unit1, unit0;
+    if (nct_interpret_timeunit(var1, &tm1, &unit1) | nct_interpret_timeunit(var0, &tm0, &unit0))
+	return_error(1<<30);
+    if (unit1 != unit0) {
+	nct_puterror("timeunit mismatch (%s, %s)\n", nct_timeunits[unit1], nct_timeunits[unit0]);
+	return_error(1<<30); }
+    if (!memcmp(&tm1, &tm0, sizeof(tm1)))
+	return 0;
+    time_t diff = mktime(&tm1) - mktime(&tm0);
+    return diff / timecoeff[unit0];
 }
 
 void nct_unlink_data(nct_var* var) {

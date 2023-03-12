@@ -100,3 +100,15 @@ static nct_set* _nct_read_var_info(nct_set *set, int varid, int flags) {
     }
     return set;
 }
+
+#define __nct_vardimid_from_startrule(arg)	((arg).llu >> 50)
+#define __nct_offset_from_startrule(arg)	((arg).llu & ((1L<<50)-1))
+
+static void _nct_setrule_start(nct_var* var, int vardimid, size_t offset) {
+    var->a[nctrule_start].llu = ((size_t)vardimid << 50) + offset;
+    var->rules |= 1<<nctrule_start;
+    if (var->ndims)
+	var->len = nct_get_len_from(var, 0); // This is a variable using the operated dimension
+    else
+	var->len -= offset; // This is a dimension. This should be called before the variables.
+}

@@ -12,6 +12,7 @@ typedef struct nct_att nct_att;
 typedef struct nct_anyd nct_anyd;
 typedef union  nct_any nct_any;
 typedef int (*nct_ncget_t)(int,int,void*);
+typedef int (*nct_ncget_partial_t)(int, int, const size_t*, const size_t*, void*);
 
 /* Use this to redirect error messages elsewhere than to stderr:
  *	char errormsg[512];
@@ -36,6 +37,25 @@ extern const char* nct_default_color;
 enum {nct_auto, nct_interrupt, nct_pass};
 extern int nct_error_action;
 
+/* These are for internal use but nct_nrules is needed in the header. */
+typedef enum {nctrule_start, nctrule_end, nct_nrules} nctrule_e;
+
+union nct_any {
+    char hhi;
+    char c;
+    unsigned char hhu;
+    short hi;
+    unsigned short hu;
+    int i;
+    unsigned u;
+    long long lli;
+    long long unsigned llu;
+    float f;
+    double lf;
+    char* s;
+    time_t t;
+};
+
 struct nct_att {
     char*    name;
     void*    value;
@@ -59,6 +79,8 @@ struct nct_var {
     int      not_freeable;
     unsigned char* nusers; // the first user is not counted
     void*    data;
+    unsigned rules; // a bitmask of rules which are in use
+    nct_any a[nct_nrules]; // arguments for the rules that are used
 };
 
 struct nct_set {
@@ -69,22 +91,8 @@ struct nct_set {
     int       natts, attcapacity;
     nct_att*  atts;
     int       ncid, owner;
-};
-
-union nct_any {
-    char hhi;
-    char c;
-    unsigned char hhu;
-    short hi;
-    unsigned short hu;
-    int i;
-    unsigned u;
-    long long lli;
-    long long unsigned llu;
-    float f;
-    double lf;
-    char* s;
-    time_t t;
+    unsigned rules; // a bitmask of rules which are in use
+    nct_any a[nct_nrules]; // arguments for the rules that are used
 };
 
 struct nct_anyd {
@@ -152,9 +160,17 @@ nct_att* nct_get_varatt(const nct_var* var, const char* name);
 char* nct_get_varatt_text(const nct_var*, const char*);
 nct_var* nct_get_dim(const nct_set* set, const char* name);
 nct_var* nct_get_var(const nct_set* set, const char* name);
+int nct_get_vardimid(const nct_var* restrict var, int dimid);
 int nct_get_varid(const nct_set* restrict, const char* restrict);
 int nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t nct_get_len_from(const nct_var*, int startdim);
+
+/* Reads attribute "units" from $var
+   and fills timetm according to that
+   and unit with enumeration of time unit (days, seconds, etc.).
+   Returns nonzero if interpreting fails, 0 on success.
+   For form of the attribute, see nct_mktime0. */
+int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* unit);
 
 int nct_link_data(nct_var*, nct_var*);
 
@@ -188,9 +204,6 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t i
  * Returns:
  *	ret.d = Enumeration of the recognized time unit or -1 on error.
  *	ret.a.t = unix time of $epoch.
- *
- * In the macro, argument var can also be nct_set* which contains variable "time".
- * Note, that var is evaluated multiple times in the macro.
  */
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
 #define nct_mktime0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
@@ -263,6 +276,13 @@ nct_set* nct_read_mfnc_regex_gd(nct_set* s0, const char* filename, int regex_cfl
 nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, char* concatdim);
 
 nct_var* nct_rename(nct_var*, char*, int freeable);
+
+nct_var* nct_set_start(nct_var* coord, int offset);
+
+/* Untested!
+   time0(var1) - time0(var0) in their time unit.
+   Both must have the same time unit. */
+time_t nct_timediff(const nct_var* var1, const nct_var* var0);
 
 /* This frees the data unless used by another variable (see nct_copy_var) or flagged as not_freeable.
  * Can be used to limit RAM usage:
