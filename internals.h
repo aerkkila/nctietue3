@@ -1,5 +1,3 @@
-#include <nctietue3.h>
-
 /* The dimension has to exist on v0->super and its length has to be already increased.
    Currently, the dimension has to also be the first one. */
 nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany_left) {
