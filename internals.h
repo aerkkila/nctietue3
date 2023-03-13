@@ -101,9 +101,34 @@ static nct_set* _nct_read_var_info(nct_set *set, int varid, int flags) {
     return set;
 }
 
-#define __nct_vardimid_from_startrule(arg)	((arg).llu >> 50)
-#define __nct_offset_from_startrule(arg)	((arg).llu & ((1L<<50)-1))
+#define __nct_vardimid_from_getvararule(arg)	((arg).llu >> 50)
+#define __nct_offset_from_getvararule(arg)	((arg).llu & ((1L<<50)-1))
 
+/* Used in setrule_start and setrule_end. */
+static void __nct_setrule_getvara(nct_var* var, int vardimid, size_t arg, nctrule_e which) {
+    var->a[which].llu = ((size_t)vardimid << 50) + arg;
+    if (var->rules & 1<<which) {
+	nct_puterror("Only one dimension can currently have start or length rule.\n");
+	other_error;
+    }
+    var->rules |= 1<<which;
+    if (var->ndims)
+	var->len = nct_get_len_from(var, 0); // This is a variable using the operated dimension
+    else
+	/* This is a dimension. This should be called before the variables. */
+	if (which == nctrule_start)	var->len -= arg;
+	else				var->len = arg;
+}
+
+static void _nct_setrule_start(nct_var* var, int vardimid, size_t arg) {
+    __nct_setrule_getvara(var, vardimid, arg, nctrule_start);
+}
+
+static void _nct_setrule_length(nct_var* var, int vardimid, size_t arg) {
+    __nct_setrule_getvara(var, vardimid, arg, nctrule_length);
+}
+
+#if 0
 static void _nct_setrule_start(nct_var* var, int vardimid, size_t offset) {
     var->a[nctrule_start].llu = ((size_t)vardimid << 50) + offset;
     var->rules |= 1<<nctrule_start;
@@ -112,3 +137,4 @@ static void _nct_setrule_start(nct_var* var, int vardimid, size_t offset) {
     else
 	var->len -= offset; // This is a dimension. This should be called before the variables.
 }
+#endif

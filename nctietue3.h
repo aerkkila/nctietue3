@@ -38,7 +38,7 @@ enum {nct_auto, nct_interrupt, nct_pass};
 extern int nct_error_action;
 
 /* These are for internal use but nct_nrules is needed in the header. */
-typedef enum {nctrule_start, nctrule_end, nct_nrules} nctrule_e;
+typedef enum {nctrule_start, nctrule_length, nct_nrules} nctrule_e;
 
 union nct_any {
     char hhi;
@@ -277,6 +277,7 @@ nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, c
 
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
+nct_var* nct_set_length(nct_var* coord, int length);
 nct_var* nct_set_start(nct_var* coord, int offset);
 
 /* Untested!
