@@ -1193,7 +1193,7 @@ void nct_unlink_data(nct_var* var) {
     var->capacity = 0;
 }
 
-void nct_write_nc(const nct_set* src, const char* name) {
+int nct_create_nc(const nct_set* src, const char* name) {
     int ncid, id;
     startpass;
 
@@ -1219,7 +1219,13 @@ void nct_write_nc(const nct_set* src, const char* name) {
 	if(unlink)
 	    nct_unlink_data(v);
     }
-    ncfunk(nc_close, ncid);
+    endpass;
+    return ncid;
+}
+
+void nct_write_nc(const nct_set* src, const char* name) {
+    startpass;
+    ncfunk(nc_close, nct_create_nc(src, name));
     endpass;
 }
 

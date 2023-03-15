@@ -123,6 +123,9 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 /* see nct_mktime0 */
 nct_var* nct_convert_timeunits(nct_var* var, const char* units);
 
+/* Like nct_write_nc but returns ncid without closing it. */
+int nct_create_nc(const nct_set* src, const char* name);
+
 nct_var* nct_copy_var(nct_set*, nct_var*, int link);
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
