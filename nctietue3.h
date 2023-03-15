@@ -38,9 +38,6 @@ extern const char* nct_default_color;
 enum {nct_auto, nct_interrupt, nct_pass};
 extern int nct_error_action;
 
-/* These are for internal use but nct_nrules is needed in the header. */
-typedef enum {nctrule_start, nctrule_length, nct_nrules} nctrule_e;
-
 union nct_any {
     char hhi;
     char c;
@@ -56,6 +53,15 @@ union nct_any {
     char* s;
     time_t t;
 };
+
+/* These are for internal use but nct_r_nrules is needed in this header. */
+typedef enum {
+    nct_r_start, nct_r_nrules,
+} nct_rule_e;
+/* This struct is used instead of nct_any for future compatibility. */
+typedef struct {
+    nct_any arg;
+} nct_rule;
 
 struct nct_att {
     char*    name;
@@ -80,8 +86,8 @@ struct nct_var {
     int      not_freeable;
     unsigned char* nusers; // the first user is not counted
     void*    data;
-    unsigned rules; // a bitmask of rules which are in use
-    nct_any a[nct_nrules]; // arguments for the rules that are used
+    unsigned  rules; // a bitmask of rules which are in use
+    nct_rule rule[nct_r_nrules];
 };
 
 struct nct_set {
@@ -92,8 +98,7 @@ struct nct_set {
     int       natts, attcapacity;
     nct_att*  atts;
     int       ncid, owner;
-    unsigned rules; // a bitmask of rules which are in use
-    nct_any a[nct_nrules]; // arguments for the rules that are used
+    unsigned  rules; // a bitmask of rules which are in use
 };
 
 struct nct_anyd {
@@ -291,8 +296,11 @@ nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, c
 
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
-nct_var* nct_set_length(nct_var* coord, int length);
-nct_var* nct_set_start(nct_var* coord, int offset);
+/* Should be used before loading the variables.
+ * The coordinate can be loaded before this function.
+ */
+nct_var* nct_set_length(nct_var* coord, size_t length);
+nct_var* nct_set_start(nct_var* coord, size_t offset);
 
 /* Untested!
    time0(var1) - time0(var0) in their time unit.

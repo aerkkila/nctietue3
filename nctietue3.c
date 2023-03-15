@@ -847,7 +847,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     }
     nct_allocate_varmem(var);
     
-    if (!(var->rules & (1<<nctrule_start | 1<<nctrule_length))) {
+    if (!(var->super->rules & (1<<nct_r_start))) {
 	nct_ncget_t getdata = nct_getfun[dtype];
 	ncfunk(getdata, var->super->ncid, var->ncid, var->data);
 	return var;
@@ -856,17 +856,11 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     int ndims = var->ndims;
     nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
     size_t start[ndims], count[ndims];
-    memset(start, 0, ndims*sizeof(size_t));
-    for(int i=0; i<ndims; i++)
-	count[i] = var->super->dims[var->dimids[i]]->len;
-
-    if (var->rules & (1<<nctrule_start)) {
-	int vardimid = __nct_vardimid_from_getvararule(var->a[nctrule_start]);
-	start[vardimid] = __nct_offset_from_getvararule(var->a[nctrule_start]);
+    for(int i=0; i<ndims; i++) {
+	nct_var* dim = var->super->dims[var->dimids[i]];
+	start[i] = dim->rule[nct_r_start].arg.lli; // can be read even if not in use, then 0
+	count[i] = dim->len;
     }
-    /* arg in nctrule_length is not needed because length is read from the dimension
-       which has been edited already.
-       Maybe start should also be implemented this way. */
 
     ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
     return var;
@@ -1127,47 +1121,25 @@ nct_var* nct_rename(nct_var* var, char* name, int freeable) {
     return var;
 }
 
-nct_var* nct_set_length(nct_var* coord, int offset) {
-    if (coord->data)
-	;
-    else
-	_nct_setrule_length(coord, 0, offset);
-    coord->len = offset;
-
-    /* Each variable has to be edited according to the change in this coordinate. */
-    nct_foreach(coord->super, var) {
-	int dimid = nct_get_vardimid(var, coord->id);
-	if (dimid < 0)
-	    continue;
-	if (var->data)
-	    //_nct_select(var, dimid, offset, offset+coord->len);
-	    puts("Set the rule before loading the variable or implement _nct_select");
-	else
-	    _nct_setrule_length(var, dimid, offset);
-    }
-    return coord;
+nct_var* nct_set_length(nct_var* dim, size_t arg) {
+    dim->len = arg;
+    dim->super->rules |= 1<<nct_r_start; // start is used to mark length as well
+    nct_foreach(dim->super, var)
+	var->len = nct_get_len_from(var, 0);
+    return dim;
 }
 
-nct_var* nct_set_start(nct_var* coord, int offset) {
-    int size = nctypelen(coord->dtype);
-    if (coord->data)
-	memmove(coord->data, coord->data+offset*size, (coord->len-offset)*size);
-    else
-	_nct_setrule_start(coord, 0, offset);
-    coord->len -= offset;
-
-    /* Each variable has to be edited according to the change in this coordinate. */
-    nct_foreach(coord->super, var) {
-	int dimid = nct_get_vardimid(var, coord->id);
-	if (dimid < 0)
-	    continue;
-	if (var->data)
-	    //_nct_select(var, dimid, offset, offset+coord->len);
-	    puts("Set the start before loading the variable or implement _nct_select");
-	else
-	    _nct_setrule_start(var, dimid, offset);
+nct_var* nct_set_start(nct_var* dim, size_t arg) {
+    dim->rule[nct_r_start].arg.lli = arg;
+    dim->len -= arg;
+    if (dim->data) {
+	int size = nctypelen(dim->dtype);
+	memmove(dim->data, dim->data+arg*size, dim->len*size);
     }
-    return coord;
+    dim->super->rules |= 1<<nct_r_start;
+    nct_foreach(dim->super, var)
+	var->len = nct_get_len_from(var, 0);
+    return dim;
 }
 
 time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
