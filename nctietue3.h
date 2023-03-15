@@ -13,6 +13,7 @@ typedef struct nct_anyd nct_anyd;
 typedef union  nct_any nct_any;
 typedef int (*nct_ncget_t)(int,int,void*);
 typedef int (*nct_ncget_partial_t)(int, int, const size_t*, const size_t*, void*);
+typedef int (*nct_ncget_1_t)(int, int, const size_t*, void*);
 
 /* Use this to redirect error messages elsewhere than to stderr:
  *	char errormsg[512];
@@ -144,6 +145,13 @@ nct_var* nct_drop_vardim_first(nct_var*) __THROW __attribute__((deprecated));
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 
+/* Inefficient if var is not loaded. Meant for light use.
+   If right, then returns n+1 if index n matches.
+   In macro nct_find_sorted, right is an optional argument with default value zero. */
+size_t nct_find_sorted_lr(const nct_var* var, double value, int right);
+#define _nct_find_sorted(var, value, right, ...) nct_find_sorted_lr(var, value, right)
+#define nct_find_sorted(...) _nct_find_sorted(__VA_ARGS__, 0)
+
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);
 nct_var* nct_prevvar(const nct_var*);
@@ -156,6 +164,7 @@ nct_var* nct_lastvar(const nct_set*);
 void _nct_free(int _, ...); // first argument is meaningless
 void nct_free1(nct_set*);
 
+void nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // coordinates of the index
 nct_att* nct_get_varatt(const nct_var* var, const char* name);
 char* nct_get_varatt_text(const nct_var*, const char*);
 nct_var* nct_get_dim(const nct_set* set, const char* name);
@@ -164,6 +173,8 @@ int nct_get_vardimid(const nct_var* restrict var, int dimid);
 int nct_get_varid(const nct_set* restrict, const char* restrict);
 int nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t nct_get_len_from(const nct_var*, int startdim);
+double    nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
+long long nct_getl_integer(const nct_var*, size_t);  // If the value has to be loaded.
 
 /* Reads attribute "units" from $var
    and fills timetm according to that

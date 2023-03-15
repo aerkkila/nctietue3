@@ -133,6 +133,21 @@ void* nct_getfun_partial[] = {
     [NC_UINT64] = nc_get_vara_ulonglong,
 };
 
+void* nct_getfun_1[] = {
+    [NC_NAT]    = nc_get_var1,
+    [NC_BYTE]   = nc_get_var1_schar,
+    [NC_CHAR]   = nc_get_var1_schar,
+    [NC_SHORT]  = nc_get_var1_short,
+    [NC_INT]    = nc_get_var1_int,
+    [NC_FLOAT]  = nc_get_var1_float,
+    [NC_DOUBLE] = nc_get_var1_double,
+    [NC_UBYTE]  = nc_get_var1_uchar,
+    [NC_USHORT] = nc_get_var1_ushort,
+    [NC_UINT]   = nc_get_var1_uint,
+    [NC_INT64]  = nc_get_var1_longlong,
+    [NC_UINT64] = nc_get_var1_ulonglong,
+};
+
 #include "internals.h"
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name) {
@@ -546,6 +561,23 @@ next:;
     return_error(NULL);
 }
 
+size_t nct_find_sorted(const nct_var* var, double value, int right) {
+    double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
+    long long sem[] = {0, var->len, (var->len)/2}; // start, end, mid
+    while (1) {
+	if (sem[1]-sem[0] <= 1) {
+	    double v0 = getfun(var, sem[0]),
+		   v1 = getfun(var, sem[1]);
+	    return value<v0 ? sem[0]-1 : value<v1 ? sem[1]-1 : value>v1 ? sem[1]+1 : sem[1]+!!right;
+	}
+	double try = getfun(var, sem[2]);
+	if (try == value)
+	    return sem[2]+!!right;
+	sem[try>value] = sem[2]+1-2*(try>value); // if (try>value) end = mid-1; else start = mid+1;
+	sem[2] = (sem[0]+sem[1]) / 2;
+    }
+}
+
 nct_var* nct_firstvar(const nct_set* set) {
     int nvars = set->nvars;
     for(int i=0; i<nvars; i++)
@@ -555,7 +587,7 @@ nct_var* nct_firstvar(const nct_set* set) {
 }
 
 nct_var* nct_nextvar(const nct_var* var) {
-    nct_set* set = var->super; // We assume that var is a valid variable.
+    nct_set* set = var->super;
     int nvars = set->nvars;
     for(int i=var->id+1; i<nvars; i++)
 	if(!nct_iscoord(set->vars[i]))
@@ -564,7 +596,7 @@ nct_var* nct_nextvar(const nct_var* var) {
 }
 
 nct_var* nct_prevvar(const nct_var* var) {
-    nct_set* set = var->super; // We assume that var is a valid variable.
+    nct_set* set = var->super;
     for(int i=var->id-1; i>=0; i--)
 	if(!nct_iscoord(set->vars[i]))
 	    return set->vars[i];
@@ -645,6 +677,15 @@ void nct_free1(nct_set* set) {
     if (set->owner) free(set);
 }
 
+void nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind) {
+    int ndims = var->ndims;
+    for(int i=0; i<ndims; i++) {
+	size_t nextlen = nct_get_len_from(var, i+1);
+	out[i] = ind / nextlen;
+	ind %= nextlen;
+    }
+}
+
 nct_var* nct_get_dim(const nct_set* set, const char* name) {
     int ndims = set->ndims;
     for(int i=0; i<ndims; i++)
@@ -706,6 +747,24 @@ size_t nct_get_len_from(const nct_var* var, int start) {
     for (int i=start; i<var->ndims; i++)
 	len *= var->super->dims[var->dimids[i]]->len;
     return len;
+}
+
+double nct_getl_floating(const nct_var* var, size_t ind) {
+    size_t coords[var->ndims];
+    nct_get_coords_from_ind(var, coords, ind);
+    double result;
+    nct_ncget_1_t fun = nct_getfun_1[NC_DOUBLE];
+    fun(var->super->ncid, var->ncid, coords, &result);
+    return result;
+}
+
+long long nct_getl_integer(const nct_var* var, size_t ind) {
+    size_t coords[var->ndims];
+    nct_get_coords_from_ind(var, coords, ind);
+    long long result;
+    nct_ncget_1_t fun = nct_getfun_1[NC_INT64];
+    fun(var->super->ncid, var->ncid, coords, &result);
+    return result;
 }
 
 int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit) {
