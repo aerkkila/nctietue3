@@ -9,32 +9,6 @@
 #include <dirent.h>
 #include <unistd.h>
 
-#define other_error switch(nct_error_action) {	\
-    case nct_auto:				\
-    case nct_interrupt: asm("int $3"); break;	\
-    default:;					\
-}
-
-#define return_error(val) switch(nct_error_action) {	\
-    case nct_auto:					\
-    case nct_interrupt: asm("int $3"); /* no break */	\
-    default: return val;				\
-}
-
-#define nct_puterror(...) do {	fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
-    				fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__); } while(0)
-
-#define ncerror(arg) fprintf(nct_stderr? nct_stderr: stderr, "%sNetcdf-error%s (%s: %i):\n    %s\n",	\
-			     nct_error_color, nct_default_color, __FILE__, __LINE__, nc_strerror(arg))
-
-#define ncfunk(fun, ...)			\
-    do {					\
-	if((nct_ncret = fun(__VA_ARGS__))) {	\
-	    ncerror(nct_ncret);			\
-	    other_error;			\
-	}					\
-    } while(0)
-
 #define startpass			\
     int __nct_err = nct_error_action;	\
     if (!(nct_error_action = nct_auto))	\
@@ -170,7 +144,7 @@ nct_var* nct_add_dim(nct_set* set, size_t len, char* name) {
     return set->dims[id];
 failed:
     nct_puterror("realloc failed in nct_add_dim: %s\n", strerror(errno));
-    return_error(NULL);
+    nct_return_error(NULL);
 }
 
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
@@ -199,7 +173,7 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 failed:
     startpass;
     nct_puterror("(re/m)alloc failed in nct_add_var: %s\n", strerror(errno));
-    return_error(NULL);
+    nct_return_error(NULL);
     endpass; // TODO: this is never reached which is a bug
 }
 
@@ -232,7 +206,7 @@ failed:
     var->attcapacity = var->natts;
     nct_puterror("realloc failed in nct_add_varatt_text.\n");
     print_varerror(var, "    ");
-    other_error;
+    nct_other_error;
     endpass;
 }
 
@@ -486,7 +460,7 @@ nct_var* nct_dim2coord(nct_var* var, void* src, nc_type dtype) {
     return var;
 failed:
     nct_puterror("(re/m)alloc failed in nct_add_var: %s\n", strerror(errno));
-    return_error(NULL);
+    nct_return_error(NULL);
 }
 
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
@@ -558,7 +532,7 @@ char* nct_find_unique_name_from(nct_set* set, const char* initname, int num) {
 	return strdup(newname);
 next:;
     }
-    return_error(NULL);
+    nct_return_error(NULL);
 }
 
 size_t nct_find_sorted(const nct_var* var, double value, int right) {
@@ -813,7 +787,7 @@ int nct_link_data(nct_var* dest, nct_var* src) {
     if(!src->nusers) {
 	if(nct_nlinked_vars >= nct_nlinked_max) {
 	    nct_puterror("Maximum number of different links (%i) reached\n", nct_nlinked_max);
-	    return_error(1); }
+	    nct_return_error(1); }
 	src->nusers = nct_nusers+nct_nlinked_vars++;
     }
     ++*src->nusers;
@@ -836,7 +810,7 @@ void nct_allocate_varmem(nct_var* var) {
     nct_puterror("memory allocation failed: %s\n", strerror(errno));
     print_varerror(var, "    ");
     var->capacity = 0;
-    other_error;
+    nct_other_error;
 }
 
 nct_var* nct_load_as(nct_var* var, nc_type dtype) {
@@ -987,7 +961,7 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nct
 	if (!var) {
 	    nct_puterror("No variables in \"%s\"\n", filename);
 	    nct_free1(&v);
-	    return_error(NULL);
+	    nct_return_error(NULL);
 	}
 	void* ret = NULL;
 	if (nct_load_as(var, nctype)) {
@@ -1012,7 +986,7 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nct
     void *ret = malloc(len*size1);
     if (!ret) {
 	nct_puterror("malloc failed");
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     nct_ncget_t func = nct_getfun[dtype];
     ncfunk(func, ncid, varid, ret);
@@ -1095,7 +1069,7 @@ nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, c
 	}
 	if (!nfiles) {
 	    nct_puterror("empty filename to read\n");
-	    return_error(vs0); // error if user told to count files and result == 0
+	    nct_return_error(vs0); // error if user told to count files and result == 0
 	}
     }
     else if (!nfiles)
@@ -1146,10 +1120,10 @@ time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
     struct tm tm1, tm0;
     int unit1, unit0;
     if (nct_interpret_timeunit(var1, &tm1, &unit1) | nct_interpret_timeunit(var0, &tm0, &unit0))
-	return_error(1<<30);
+	nct_return_error(1<<30);
     if (unit1 != unit0) {
 	nct_puterror("timeunit mismatch (%s, %s)\n", nct_timeunits[unit1], nct_timeunits[unit0]);
-	return_error(1<<30); }
+	nct_return_error(1<<30); }
     if (!memcmp(&tm1, &tm0, sizeof(tm1)))
 	return 0;
     time_t diff = mktime(&tm1) - mktime(&tm0);
@@ -1225,13 +1199,13 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     dp = opendir(dirname);
     if (!dp) {
 	nct_puterror("could not open directory \"%s\": %s", dirname, strerror(errno));
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     int dlen = strlen(dirname);
     /* find the matching files */
     if(chdir(dirname)) {
 	nct_puterror("chdir(dirname) in nct__get_filenames: %s", strerror(errno));
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     strcpy(str, filename+ind+1);
     i = regcomp(&reg, str, regex_cflags);
@@ -1239,7 +1213,7 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
 	char er[700];
 	regerror(i, &reg, er, 700);
 	nct_puterror("regcomp error:\n    %s\n", er);
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     num = 0;
     while ((entry = readdir(dp))) {
@@ -1257,7 +1231,7 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     match[lmatch] = '\0'; // end with two null bytes;
     if(chdir(getenv("PWD"))) {
 	nct_puterror("chdir in nct_get_filenames: %s", strerror(errno));
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     char* sorted = malloc(lmatch+1);
     nct__sort_str(sorted, match, num);

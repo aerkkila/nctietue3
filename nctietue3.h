@@ -21,8 +21,33 @@ typedef int (*nct_ncget_1_t)(int, int, const size_t*, void*);
  */
 extern FILE* nct_stderr;
 
+#define nct_other_error switch(nct_error_action) {	\
+    case nct_auto:				\
+    case nct_interrupt: asm("int $3"); break;	\
+    default:;					\
+}
+
+#define nct_return_error(val) switch(nct_error_action) {	\
+    case nct_auto:					\
+    case nct_interrupt: asm("int $3"); /* no break */	\
+    default: return val;				\
+}
+
 #define nct_puterror(...) do {	fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
     				fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__); } while(0)
+
+#define ncerror(arg) fprintf(nct_stderr? nct_stderr: stderr, "%sNetcdf-error%s (%s: %i):\n    %s\n",	\
+			     nct_error_color, nct_default_color, __FILE__, __LINE__, nc_strerror(arg))
+
+#define ncfunk(fun, ...)			\
+    do {					\
+	if((nct_ncret = fun(__VA_ARGS__))) {	\
+	    ncerror(nct_ncret);			\
+	    nct_other_error;			\
+	}					\
+    } while(0)
+
+extern int nct_ncret;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
 

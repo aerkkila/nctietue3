@@ -29,7 +29,7 @@ ctype* nct_range_@nctype(ctype i0, ctype i1, ctype gap) {
     size_t len = (i1-i0) / gap + 1;
     ctype* dest = malloc(len*sizeof(ctype));
     for(size_t i=0; i<len; i++)
-	dest[i] = i*gap;
+	dest[i] = i0 + i*gap;
     return dest;
 }
 
@@ -62,7 +62,7 @@ long long nct_get_integer_last_@nctype(const nct_var* var, size_t ind) {
 nct_anyd nct_max_anyd_@nctype(const nct_var* var) {
 #if CHECK_INVALID
     if(!(var->len))
-	return_error((nct_anyd){ {0}, -1 });
+	nct_return_error((nct_anyd){ {0}, -1 });
 #endif
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     size_t numi=0;
@@ -89,7 +89,7 @@ long long nct_max_integer_@nctype(const nct_var* var) {
 nct_anyd nct_min_anyd_@nctype(const nct_var* var) {
 #if CHECK_INVALID
     if(!(var->len))
-	return_error((nct_anyd){ {0}, -1 });
+	nct_return_error((nct_anyd){ {0}, -1 });
 #endif
     /* using the first value would not work with nan-values */
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
@@ -117,7 +117,7 @@ long long nct_min_integer_@nctype(const nct_var* var) {
 void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
 #if CHECK_INVALID
     if(!(var->len))
-	return_error(NULL);
+	nct_return_error(NULL);
 #endif
     ctype maxval, minval, *result=vresult;
     /* using the first value would not work with nan-values */

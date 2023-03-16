@@ -9,7 +9,7 @@ nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany
 	nct_puterror("wrong dimensions in _nct_concat_var\n");
 	print_varerror(v0, "    ");
 	print_varerror(v1, "    ");
-	return_error(NULL);
+	nct_return_error(NULL);
     }
     size_t s1 = nctypelen(v0->dtype);
     if(len >= v0->capacity) {
