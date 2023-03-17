@@ -11,7 +11,7 @@
 
 #define startpass			\
     int __nct_err = nct_error_action;	\
-    if (!(nct_error_action = nct_auto))	\
+    if (nct_error_action == nct_auto)	\
 	nct_error_action = nct_pass
 
 #define endpass nct_error_action = __nct_err
@@ -1145,9 +1145,11 @@ int nct_create_nc(const nct_set* src, const char* name) {
 
     ncfunk(nc_create, name, NC_NETCDF4|NC_CLOBBER, &ncid);
     ncfunk(nc_set_fill, ncid, NC_NOFILL, NULL);
-    for(int i=0; i<src->ndims; i++)
+    int n = src->ndims;
+    for(int i=0; i<n; i++)
 	ncfunk(nc_def_dim, ncid, src->dims[i]->name, src->dims[i]->len, &id);
-    for(int i=0; i<src->nvars; i++) {
+    n = src->nvars;
+    for(int i=0; i<n; i++) {
 	nct_var* v = src->vars[i];
 	int unlink = 0;
 	if(!v->data) {
