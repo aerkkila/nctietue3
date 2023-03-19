@@ -45,6 +45,7 @@ static void _nct_read_dim(nct_set* set, int dimid) {
 	.freeable_name = 1,
 	.len           = len,
     };
+    (**v).filedimensions[0] = len;
     return;
 }
 

@@ -9,6 +9,13 @@
 #include <dirent.h>
 #include <unistd.h>
 
+nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
+
+#define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
+
+#define setrule(a, r) ((a)->rules |= 1<<(r))
+#define hasrule(a, r) ((a)->rules & 1<<(r))
+
 #define startpass			\
     int __nct_err = nct_error_action;	\
     if (nct_error_action == nct_auto)	\
@@ -221,7 +228,16 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
     return var;
 }
 
-/* Concatenation is not yet supported along other existing dimensions than the first one. */
+/* Concatenation is not yet supported along other existing dimensions than the first one.
+   Trying to concatenate an loaded and unloaded variable is undefined behaviour.
+   Coordinates will be loaded if aren't already.
+   Variable will not be loaded if aren't already.
+   In that case, concatenated sets must not be freed before loading data.
+   The following is hence an error:
+   *	concat(set0, set1) // var n is not loaded
+   *	free(set1)
+   *	load(set0->vars[n])
+   */
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left) {
     int dimid0, dimid1, varid0=0, varid1;
     if(!dimname)
@@ -246,11 +262,11 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     }
     /* Now dimname is either existing dimension or one to be created. */
     dimid0 = nct_get_dimid(vs0, dimname);
-    if(dimid0 < 0)
+    if (dimid0 < 0)
 	dimid0 = nct_add_dim(vs0, 1, dimname)->id;
     /* The dimension exists now in vs0 but not necessarily in vs1. */
     dimid1 = nct_get_dimid(vs1, dimname);
-    if(dimid1 < 0)
+    if (dimid1 < 0)
 	vs0->dims[dimid0]->len++;
     else {
 	vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
@@ -259,16 +275,27 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	   (varid1=nct_get_varid(vs1, dimname)) >= 0)
 	{
 	    nct_att* att = nct_get_varatt(vs0->vars[varid0], "units"); // convert timeunits if the dimension is time
-	    if(att)
+	    if (att)
 		nct_convert_timeunits(vs1->vars[varid1], att->value);
+	    if (!vs0->vars[varid0]->data)
+		nct_load(vs0->vars[varid0]);
+	    if (!vs1->vars[varid1]->data)
+		nct_load(vs1->vars[varid1]);
 	    _nct_concat_var(vs0->vars[varid0], vs1->vars[varid1], dimid0, howmany_left);
 	}
     }
     /* Finally concatenate all variables */
     nct_foreach(vs0, var0) {
-	nct_var* var1;
-	if((var1=nct_get_var(vs1, var0->name)))
+	nct_var* var1 = nct_get_var(vs1, var0->name);
+	if (!var1)
+	    continue;
+	if (!var0->data)
+	    nct_set_concat(var0, var1, howmany_left);
+	else {
+	    if(!var1->data)
+		nct_load(var1); // Now data is written here and copied to var0. Not good.
 	    _nct_concat_var(var0, var1, dimid0, howmany_left);
+	}
     }
     return vs0;
 }
@@ -599,13 +626,15 @@ static void nct_free_var(nct_var* var) {
     for(int i=0; i<var->natts; i++)
 	_nct_free_att(var->atts+i);
     free(var->atts);
-    if(var->dtype == NC_STRING)
+    if (var->dtype == NC_STRING)
 	for(int i=0; i<var->len; i++)
 	    free(((char**)var->data)[i]);
     nct_unlink_data(var);
     var->capacity = 0;
-    if(var->freeable_name)
+    if (var->freeable_name)
 	free(var->name);
+    if hasrule(var, nct_r_concat)
+	free(var->rule[nct_r_concat].arg.v);
 }
 
 void _nct_free(int _, ...) {
@@ -648,7 +677,15 @@ void nct_free1(nct_set* set) {
 	set->ncid = 0;
     }
     endpass;
-    if (set->owner) free(set);
+    if hasrule(set, nct_r_list) {
+	nct_set* ptr = set;
+	nct_set nullset = {0};
+	/* List contains structs and not pointers to them. Hence memcmp instead of while(++ptr). */
+	while (memcmp(++ptr, &nullset, sizeof(nct_set)))
+	    nct_free1(ptr);
+    }
+    if (set->owner)
+	free(set);
 }
 
 void nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind) {
@@ -690,6 +727,10 @@ char* nct_get_varatt_text(const nct_var* var, const char* name) {
 	if (!strcmp(var->atts[i].name, name))
 	    return var->atts[i].value;
     return NULL;
+}
+
+nct_var* nct_get_vardim(const nct_var* var, int num) {
+    return var->super->dims[var->dimids[num]];
 }
 
 int nct_get_vardimid(const nct_var* restrict var, int dimid) {
@@ -820,23 +861,101 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 	var->dtype = dtype;
     }
     nct_allocate_varmem(var);
-    
-    if (!(var->super->rules & (1<<nct_r_start))) {
-	nct_ncget_t getdata = nct_getfun[dtype];
-	ncfunk(getdata, var->super->ncid, var->ncid, var->data);
-	return var;
-    }
 
+    nct_set* set = var->super;
+    int* dimids = var->dimids;
     int ndims = var->ndims;
     nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
     size_t start[ndims], count[ndims];
+
+    if (!(hasrule(set, nct_r_start)) || nct_iscoord(var))
+	goto no_startrule;
+
     for(int i=0; i<ndims; i++) {
-	nct_var* dim = var->super->dims[var->dimids[i]];
+	nct_var* dim = set->dims[dimids[i]];
 	start[i] = dim->rule[nct_r_start].arg.lli; // can be read even if not in use, then 0
 	count[i] = dim->len;
     }
+    if (!hasrule(var, nct_r_concat)) {
+	ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
+	return var;
+    }
 
-    ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
+    /* We must deside whence to get the data when having both start and concat rules. */
+    nct_var* dim0 = nct_get_vardim(var, 0);
+    int startloc = dim0->rule[nct_r_start].arg.lli;
+    int length = dim0->filedimensions[0];
+    nct_var* var1 = var;
+    int filei = 0;
+    while (startloc >= length) {
+	length += var1->filedimensions[0];
+	if (filei >= var->rule[nct_r_concat].n)
+	    break;
+	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
+    }
+    if (startloc >= length) {
+	nct_puterror("startlocation > length: filei = %i, length = %i\n", filei, length);
+	nct_return_error(var); // nothing can be read
+    }
+    int dim0start = startloc - (length - var1->filedimensions[0]); // how much after the end of the previous file
+    int target_size = dim0->len;
+    int current_size = length - startloc;
+    int nfiles = var->rule[nct_r_concat].n; // How many to concatenate. Real number of files is one more.
+    void* dataptr = var->data;
+
+    size_t count_1plus = 1;
+    for(int i=1; i<ndims; i++)
+	count_1plus *= count[i];
+
+    /* Read the first file. */
+    start[0] = dim0start;
+    if (current_size < target_size) { // This file is not enough.
+	count[0] = var1->filedimensions[0] - dim0start;
+	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+	dataptr += (count_1plus * count[0]) * nctypelen(dtype);
+    }
+    else { // This file is enough
+	count[0] = target_size;
+	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+	return var;
+    }
+
+    /* The middle files which can be read from start to end. */
+    start[0] = 0;
+    while(filei < nfiles) {
+	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
+	current_size += var1->filedimensions[0];
+	if (current_size >= target_size)
+	    goto last_file;
+	count[0] = var1->filedimensions[0];
+	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+	dataptr += (count_1plus * count[0]) * nctypelen(dtype);
+    }
+    nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i\n",
+	    nfiles, current_size, target_size);
+    nct_return_error(var);
+
+last_file:
+    count[0] = target_size - (current_size - var1->filedimensions[0]); // how much target_size if after the previous file
+    ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+    return var;
+
+no_startrule:
+    /* Coordinate variables are never loaded partially
+       because nct_free wouldn't know whether to rewind var->data or not. */
+    nct_ncget_t getfulldata = nct_getfun[dtype];
+    ncfunk(getfulldata, var->super->ncid, var->ncid, var->data);
+    var->data += var->rule[nct_r_start].arg.lli * nctypelen(var->dtype); // only meant for coordinate variables
+    if (!hasrule(var, nct_r_concat))
+	return var;
+    /* concatenation */
+    dataptr = var->data + var->len*nctypelen(dtype);
+    int n = var->rule[nct_r_concat].n;
+    for(int i=0; i<n; i++) {
+	nct_var* var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[i];
+	ncfunk(getfulldata, var1->super->ncid, var1->ncid, dataptr);
+	dataptr += var1->len*nctypelen(dtype);
+    }
     return var;
 }
 
@@ -946,6 +1065,13 @@ void nct_print(const nct_set* set) {
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {
     if (flags & nct_rlazy)
 	return s;
+    if (flags & nct_rcoord) {
+	int ndims = s->ndims;
+	for(int i=0; i<ndims; i++)
+	    if (nct_iscoord(s->dims[i]))
+		nct_load(s->dims[i]);
+	return s;
+    }
     int nvars = s->nvars;
     for(int i=0; i<nvars; i++)
 	nct_load(s->vars[i]);
@@ -1021,8 +1147,22 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
 	   this will make a pointer to that instead of creating a new object.
 	   Id will then become nct_coordid(var_id). */
 	_nct_read_dim(dest, i);
-    nct_foreach(dest, var)
-	var->len = nct_get_len_from(var, 0); // Lengths could not be calculated before reading dimensions.
+    /* Lengths could not be set before reading dimensions. */
+    size_t len = 1;
+    nct_foreach(dest, var) {
+	int ndims = var->ndims;
+	int too_many;
+	if ((too_many = ndims>nct_maxdims))
+	    ndims = nct_maxdims;
+	for(int i=0; i<ndims; i++) {
+	    size_t len1 = nct_get_vardim(var, i)->len;
+	    var->filedimensions[i] = len1;
+	    len *= len1;
+	}
+	var->len = len;
+	if (too_many)
+	    var->len = nct_get_len_from(var, 0);
+    }
     return dest;
 }
 
@@ -1036,29 +1176,21 @@ nct_set* nct_read_ncf_gd(nct_set* s, const char* filename, int flags) {
     return nct_after_lazyread(s, flags);
 }
 
-nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
-    nct_set* s = malloc(sizeof(nct_set));
-    nct_read_mfnc_regex_gd(s, filename, regex_cflags, dim) -> owner = 1;
-    return s;
-}
+/* Reading multiple files as if they were one file.
+   If data shouldn't be loaded according to readflags,
+   these create null-terminated list nct_set* and return pointer to the first member.
+   */
 
-nct_set* nct_read_mfnc_regex_gd(nct_set* s0, const char* filename, int regex_cflags, char* dim) {
+nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
     char* names = nct__get_filenames(filename, 0);
     int num = (intptr_t)nct__get_filenames(NULL, 0); // returns the number of files read on previous call
-    nct_read_mfnc_ptr_gd(s0, names, num, dim);
+    nct_set* s = nct_read_mfnc_ptr(names, num, dim);
     free(names);
-    return s0;
-}
-
-nct_set* nct_read_mfnc_ptr(const char* filename, int n, char* dim) {
-    nct_set* s = malloc(sizeof(nct_set));
-    nct_read_mfnc_ptr_gd(s, filename, n, dim) -> owner = 1;
     return s;
 }
 
 /* filenames has the form of "name1\0name2\0name3\0last_name\0\0" */
-nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, char* dim) {
-    nct_set vs1;
+nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* dim) {
     const char* ptr = filenames;
     /* nfiles is just a hint. If necessary, it can be calculated. */
     if (nfiles<0) {
@@ -1069,22 +1201,44 @@ nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, c
 	}
 	if (!nfiles) {
 	    nct_puterror("empty filename to read\n");
-	    nct_return_error(vs0); // error if user told to count files and result == 0
+	    nct_return_error(NULL); // error if user told to count files and result == 0
 	}
     }
     else if (!nfiles)
-	return vs0; // no error if user wanted to read 0 files
+	return NULL; // no error if user wanted to read 0 files
     ptr = filenames;
-    nct_read_ncf_gd(vs0, ptr, nct_readflags);
-    ptr += strlen(ptr)+1;
+
+    nct_set *set, *setptr;
+    if (!(nct_readflags & nct_rnoall))
+	goto read_and_load;
+
+    /* No loading data. Making list of nct_set* and setting right loading rules. */
+    set = setptr = calloc(nfiles+1, sizeof(nct_set)); // +1 for NULL-termination
+    nct_read_ncf_gd(set, ptr, nct_readflags|nct_ratt); // concatenation needs attributes to convert time units
+    set->owner = 1;
     nfiles--;
+    setrule(set, nct_r_list); // so that nct_free knows to free other members as well
+    ptr += strlen(ptr)+1;
     while (*ptr) {
-	nct_read_ncf_gd(&vs1, ptr, nct_readflags|nct_ratt); // concatenation needs attributes to convert time units
-	nct_concat(vs0, &vs1, dim, --nfiles);
-	nct_free1(&vs1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
+	nct_read_ncf_gd(++setptr, ptr, nct_readflags|nct_ratt);
+	nct_concat(set, setptr, dim, --nfiles);
 	ptr += strlen(ptr)+1;
     }
-    return vs0;
+    return set;
+
+read_and_load:
+    set = malloc(sizeof(nct_set));
+    nct_read_ncf_gd(set, ptr, nct_readflags|nct_ratt); // concatenation needs attributes to convert time units
+    set->owner = 1;
+    nfiles--;
+    ptr += strlen(ptr)+1;
+    while (*ptr) {
+	nct_readm_ncf(set1, ptr, nct_readflags|nct_ratt);
+	nct_concat(set, &set1, dim, --nfiles);
+	nct_free1(&set1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
+	ptr += strlen(ptr)+1;
+    }
+    return set;
 }
 
 nct_var* nct_rename(nct_var* var, char* name, int freeable) {
@@ -1095,22 +1249,38 @@ nct_var* nct_rename(nct_var* var, char* name, int freeable) {
     return var;
 }
 
+nct_var* nct_rewind(nct_var* var) {
+    var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
+    return var;
+}
+
+nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
+    setrule(var0, nct_r_concat);
+    nct_rule* r = var0->rule + nct_r_concat;
+    int size = r->n+1 + howmany_left; // how many var pointers will be put into the concatenation list
+    if(r->capacity < size) {
+	r->arg.v = realloc(r->arg.v, size*sizeof(void*));
+	r->capacity = size;
+    }
+    ((nct_var**)r->arg.v)[r->n++] = var1;
+    return var0;
+}
+
 nct_var* nct_set_length(nct_var* dim, size_t arg) {
     dim->len = arg;
-    dim->super->rules |= 1<<nct_r_start; // start is used to mark length as well
+    setrule(dim->super, nct_r_start); // start is used to mark length as well
     nct_foreach(dim->super, var)
 	var->len = nct_get_len_from(var, 0);
     return dim;
 }
 
 nct_var* nct_set_start(nct_var* dim, size_t arg) {
+    long change = arg - dim->rule[nct_r_start].arg.lli; // new_start - old_start
     dim->rule[nct_r_start].arg.lli = arg;
-    dim->len -= arg;
-    if (dim->data) {
-	int size = nctypelen(dim->dtype);
-	memmove(dim->data, dim->data+arg*size, dim->len*size);
-    }
-    dim->super->rules |= 1<<nct_r_start;
+    dim->len -= change;
+    if (dim->data)
+	dim->data += change*nctypelen(dim->dtype);
+    setrule(dim->super, nct_r_start);
     nct_foreach(dim->super, var)
 	var->len = nct_get_len_from(var, 0);
     return dim;
@@ -1132,7 +1302,7 @@ time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
 
 void nct_unlink_data(nct_var* var) {
     if (!cannot_free(var))
-	free(var->data);
+	free(nct_rewind(var)->data);
     if(var->nusers)
 	(*var->nusers)--;
     var->data = var->nusers = NULL;

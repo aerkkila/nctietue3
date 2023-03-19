@@ -75,17 +75,18 @@ union nct_any {
     long long unsigned llu;
     float f;
     double lf;
-    char* s;
+    void* v;
     time_t t;
 };
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-    nct_r_start, nct_r_nrules,
+    nct_r_start, nct_r_concat, nct_r_list, nct_r_nrules,
 } nct_rule_e;
-/* This struct is used instead of nct_any for future compatibility. */
 typedef struct {
     nct_any arg;
+    int n;		// if arg.v is list
+    int capacity;	// if arg.v is list
 } nct_rule;
 
 struct nct_att {
@@ -96,6 +97,7 @@ struct nct_att {
     unsigned freeable;
 };
 
+#define nct_maxdims 5
 struct nct_var {
     nct_set* super;
     int      id,   // nct_id(id) is location of this in set->vars, if exists there, otherwise in set->dims
@@ -107,6 +109,7 @@ struct nct_var {
     int      natts, attcapacity;
     nct_att* atts;
     size_t   len, capacity;
+    int      filedimensions[nct_maxdims]; // set when reading and not changed by any function
     nc_type  dtype;
     int      not_freeable;
     unsigned char* nusers; // the first user is not counted
@@ -202,6 +205,7 @@ nct_att* nct_get_varatt(const nct_var* var, const char* name);
 char* nct_get_varatt_text(const nct_var*, const char*);
 nct_var* nct_get_dim(const nct_set* set, const char* name);
 nct_var* nct_get_var(const nct_set* set, const char* name);
+nct_var* nct_get_vardim(const nct_var* var, int num);
 int nct_get_vardimid(const nct_var* restrict var, int dimid);
 int nct_get_varid(const nct_set* restrict, const char* restrict);
 int nct_get_dimid(const nct_set* restrict, const char* restrict);
@@ -275,6 +279,9 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  *	Data is not loaded nor memory allocated.
  *	Data must be loaded with nct_load or similar function.
  *      File is left open for reading, ncid stays valid, nct_free will close the file.
+ * nct_rcoord:
+ *	Like nct_rlazy but coordinate variables are loaded.
+ *	nct_rlazy | nct_rcoord is undefined behaviour.
  * default:
  *      Everything is read at once.
  *      File is closed, ncid becomes invalid.
@@ -284,7 +291,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  * default:
  *	Ignore attributes.
  */
-enum {nct_rlazy=1<<0, nct_ratt=1<<1};
+enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2,};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.
@@ -316,13 +323,12 @@ nct_set* nct_read_ncf_gd(nct_set*, const char*, int flags);
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concatdim);
 nct_set* nct_read_mfnc_ptr(const char* filename, int n, char* concatdim);
 
-nct_set* nct_read_mfnc_regex_gd(nct_set* s0, const char* filename, int regex_cflags, char* concatdim);
-nct_set* nct_read_mfnc_ptr_gd(nct_set* vs0, const char* filenames, int nfiles, char* concatdim);
-
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
+nct_var* nct_rewind(nct_var* var); // back to start if nct_set_start has moved data pointer away from start
+
 /* Should be used before loading the variables.
- * The coordinate can be loaded before this function.
+ * The coordinate can be loaded before these functions.
  */
 nct_var* nct_set_length(nct_var* coord, size_t length);
 nct_var* nct_set_start(nct_var* coord, size_t offset);
