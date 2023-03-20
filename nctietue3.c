@@ -884,14 +884,17 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     /* We must deside whence to get the data when having both start and concat rules. */
     nct_var* dim0 = nct_get_vardim(var, 0);
     int startloc = dim0->rule[nct_r_start].arg.lli;
-    int length = dim0->filedimensions[0];
+    int length = var->filedimensions[0];
     nct_var* var1 = var;
     int filei = 0;
-    while (startloc >= length) {
-	length += var1->filedimensions[0];
-	if (filei >= var->rule[nct_r_concat].n)
+    int nfiles = var->rule[nct_r_concat].n; // How many to concatenate. Real number of files is one more.
+    while (1) {
+	if (filei >= nfiles)
+	    break;
+	if (length >= startloc)
 	    break;
 	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
+	length += var1->filedimensions[0];
     }
     if (startloc >= length) {
 	nct_puterror("startlocation > length: filei = %i, length = %i\n", filei, length);
@@ -900,7 +903,6 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     int dim0start = startloc - (length - var1->filedimensions[0]); // how much after the end of the previous file
     int target_size = dim0->len;
     int current_size = length - startloc;
-    int nfiles = var->rule[nct_r_concat].n; // How many to concatenate. Real number of files is one more.
     void* dataptr = var->data;
 
     size_t count_1plus = 1;
@@ -931,8 +933,8 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
 	dataptr += (count_1plus * count[0]) * nctypelen(dtype);
     }
-    nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i\n",
-	    nfiles, current_size, target_size);
+    nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i, startloc = %i\n",
+	    nfiles, current_size, target_size, startloc);
     nct_return_error(var);
 
 last_file:
