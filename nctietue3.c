@@ -1150,8 +1150,8 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
 	   Id will then become nct_coordid(var_id). */
 	_nct_read_dim(dest, i);
     /* Lengths could not be set before reading dimensions. */
-    size_t len = 1;
     nct_foreach(dest, var) {
+	size_t len = 1;
 	int ndims = var->ndims;
 	int too_many;
 	if ((too_many = ndims>nct_maxdims))
