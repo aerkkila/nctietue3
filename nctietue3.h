@@ -221,6 +221,8 @@ int nct_get_vardimid(const nct_var* restrict var, int dimid);
 int nct_get_varid(const nct_set* restrict, const char* restrict);
 int nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t nct_get_len_from(const nct_var*, int startdim);
+double nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
+double nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
 double    nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
 long long nct_getl_integer(const nct_var*, size_t);  // If the value has to be loaded.
 

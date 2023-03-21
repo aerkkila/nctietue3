@@ -786,6 +786,10 @@ size_t nct_get_len_from(const nct_var* var, int start) {
     return len;
 }
 
+double nct_getg_floating(const nct_var* var, size_t ind) {
+    return var->data ? nct_get_floating(var, ind) : nct_getl_floating(var, ind);
+}
+
 double nct_getl_floating(const nct_var* var, size_t ind) {
     size_t coords[var->ndims];
     nct_get_coords_from_ind(var, coords, ind);
@@ -793,6 +797,10 @@ double nct_getl_floating(const nct_var* var, size_t ind) {
     nct_ncget_1_t fun = nct_getfun_1[NC_DOUBLE];
     fun(var->super->ncid, var->ncid, coords, &result);
     return result;
+}
+
+double nct_getg_integer(const nct_var* var, size_t ind) {
+    return var->data ? nct_get_integer(var, ind) : nct_getl_integer(var, ind);
 }
 
 long long nct_getl_integer(const nct_var* var, size_t ind) {
