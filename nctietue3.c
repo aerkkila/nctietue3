@@ -284,7 +284,9 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    _nct_concat_var(vs0->vars[varid0], vs1->vars[varid1], dimid0, howmany_left);
 	}
     }
-    /* Finally concatenate all variables */
+    /* Finally concatenate all variables.
+       Called concat-functions change var->len but not vardim->len which has already been changed here
+       so that changes would not cumulate when having multiple variables. */
     nct_foreach(vs0, var0) {
 	nct_var* var1 = nct_get_var(vs1, var0->name);
 	if (!var1)
@@ -539,6 +541,10 @@ makename:
     var->name = newname;
     var->freeable_name = 1;
     return var;
+}
+
+void nct_finalize() {
+    nc_finalize();
 }
 
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num) {
@@ -914,7 +920,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     if (current_size < target_size) { // This file is not enough.
 	count[0] = var1->filedimensions[0] - dim0start;
 	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-	dataptr += (count_1plus * count[0]) * nctypelen(dtype);
+	dataptr += (count_1plus * count[0]) * nctypelen(var->dtype);
     }
     else { // This file is enough
 	count[0] = target_size;
@@ -931,7 +937,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 	    goto last_file;
 	count[0] = var1->filedimensions[0];
 	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-	dataptr += (count_1plus * count[0]) * nctypelen(dtype);
+	dataptr += (count_1plus * count[0]) * nctypelen(var->dtype);
     }
     nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i, startloc = %i\n",
 	    nfiles, current_size, target_size, startloc);
@@ -951,12 +957,12 @@ no_startrule:
     if (!hasrule(var, nct_r_concat))
 	return var;
     /* concatenation */
-    dataptr = var->data + var->len*nctypelen(dtype);
+    dataptr = var->data + var->len*nctypelen(var->dtype);
     int n = var->rule[nct_r_concat].n;
     for(int i=0; i<n; i++) {
 	nct_var* var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[i];
 	ncfunk(getfulldata, var1->super->ncid, var1->ncid, dataptr);
-	dataptr += var1->len*nctypelen(dtype);
+	dataptr += var1->len*nctypelen(var->dtype);
     }
     return var;
 }
@@ -1265,6 +1271,7 @@ nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
 	r->capacity = size;
     }
     ((nct_var**)r->arg.v)[r->n++] = var1;
+    var0->len += var1->len;
     return var0;
 }
 

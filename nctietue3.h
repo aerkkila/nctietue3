@@ -177,6 +177,8 @@ nct_var* nct_dim2coord(nct_var*, void*, nc_type);
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink);
 nct_var* nct_drop_vardim_first(nct_var*) __THROW __attribute__((deprecated));
 
+void nct_finalize(); // calls nc_finalize to free memory used by netcdf
+
 /* If name is not unique, uses nct_find_unique_name_from to replace it. */
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
