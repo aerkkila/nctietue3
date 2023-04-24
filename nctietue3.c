@@ -543,6 +543,21 @@ makename:
     return var;
 }
 
+nct_var* nct_expand_dim(nct_var* dim, int howmuch, int start0_end1, nct_any fill) {
+    dim->len += howmuch;
+    int dimid = nct_id(dim->id);
+    if nct_iscoord(dim)
+	_nct_expand_var(dim, 0, howmuch, start0_end1, fill);
+    nct_foreach(dim->super, var) {
+	int ndims = var->ndims;
+	for(int i=0; i<ndims; i++)
+	    if (var->dimids[i] == dimid) {
+		_nct_expand_var(var, i, howmuch, start0_end1, fill);
+		break; }
+    }
+    return dim;
+}
+
 void nct_finalize() {
     nc_finalize();
 }
@@ -568,7 +583,7 @@ next:;
     nct_return_error(NULL);
 }
 
-size_t nct_find_sorted(const nct_var* var, double value, int right) {
+size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     long long sem[] = {0, var->len, (var->len)/2}; // start, end, mid
     while (1) {
@@ -765,7 +780,8 @@ int nct_get_dimid(const nct_set* restrict set, const char* restrict name) {
 
 size_t nct_get_len_from(const nct_var* var, int start) {
     size_t len = 1;
-    for (int i=start; i<var->ndims; i++)
+    int ndims = var->ndims;
+    for (int i=start; i<ndims; i++)
 	len *= var->super->dims[var->dimids[i]]->len;
     return len;
 }
@@ -1034,6 +1050,45 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     //nct_error_action = act0;
     return result;
 }
+
+#if 0
+/* This section isn't functional yet. */
+typedef struct {
+    size_t pos_in_file, usable_right, usable_left, cache_size, next_move;
+    char perc_left;
+    nct_var* var; // var->data is pointer to current location in cache
+    void* cache;  // this points to start of allocated memory
+} _cookie_t;
+
+static size_t _cookie_read(_cookie_t* cookie, void* _, size_t nbytes) {
+    size_t old = cookie->next_move;
+    cookie->next_move = nbytes;
+    usable_right -= old;
+    usable_left  += old;
+    if (usable_right >= 0) {
+	cookie->var->data += old;
+	return nbytes; }
+    if (nbytes > cookie->cache_size) {
+	void* try = realloc(cookie->var, nbytes);
+	if (!try) {
+	    nct_puterror("cannot allocate %zu bytes of memory\n", nbytes);
+	    return -1; }
+	cookie->cache = try;
+	cookie->cache_size = nbytes;
+	cookie->var->data = try + cookie->usable_left;
+    }
+    // TODO: lataa
+}
+
+FILE* nct_open_stream(nct_var* var, size_t cache_size) {
+    if (var->super->ncid <= 0)
+	return NULL;
+    _cookie_t* cookie = calloc(1, sizeof(cookie_t));
+    cookie->var = var;
+    cookie->cache_size = cache_size;
+    cookie->perc_left = 10;
+}
+#endif
 
 void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
@@ -1312,13 +1367,14 @@ time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
 void nct_unlink_data(nct_var* var) {
     if (!cannot_free(var))
 	free(nct_rewind(var)->data);
-    if(var->nusers)
+    if (var->nusers)
 	(*var->nusers)--;
     var->data = var->nusers = NULL;
     var->capacity = 0;
 }
 
-int nct_create_nc(const nct_set* src, const char* name) {
+enum {_createwhole, _createcoords};
+static int _nct_create_nc(const nct_set* src, const char* name, int what) {
     int ncid, id;
     startpass;
 
@@ -1330,6 +1386,8 @@ int nct_create_nc(const nct_set* src, const char* name) {
     n = src->nvars;
     for(int i=0; i<n; i++) {
 	nct_var* v = src->vars[i];
+	if (what==_createcoords && !nct_iscoord(v))
+	    continue;
 	int unlink = 0;
 	if(!v->data) {
 	    if(v->super->ncid > 0) {
@@ -1348,6 +1406,14 @@ int nct_create_nc(const nct_set* src, const char* name) {
     }
     endpass;
     return ncid;
+}
+
+int nct_create_nc(const nct_set* src, const char* name) {
+    return _nct_create_nc(src, name, _createwhole);
+}
+
+int nct_createcoords_nc(const nct_set* src, const char* name) {
+    return _nct_create_nc(src, name, _createcoords);
 }
 
 void nct_write_nc(const nct_set* src, const char* name) {
