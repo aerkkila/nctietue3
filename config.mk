@@ -1,4 +1,4 @@
-CFLAGS = -Wall -g -fPIC
+CFLAGS = -Wall -g -fPIC -O3
 CC = gcc
 
 prefix = /usr/local
