@@ -1247,6 +1247,11 @@ nct_set* nct_read_ncf_gd(nct_set* s, const char* filename, int flags) {
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
     char* names = nct__get_filenames(filename, 0);
     int num = (intptr_t)nct__get_filenames(NULL, 0); // returns the number of files read on previous call
+    if (num == 0) {
+	free(names);
+	nct_puterror("No files match \"%s\"\n", filename);
+	nct_return_error(NULL);
+    }
     nct_set* s = nct_read_mfnc_ptr(names, num, dim);
     free(names);
     return s;
@@ -1424,7 +1429,7 @@ void nct_write_nc(const nct_set* src, const char* name) {
 
 char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     static int num;
-    if(!filename)
+    if (!filename)
 	return (char*)(intptr_t)num;
     /* find the name of the directory */
     int i, ind = 0;
@@ -1450,13 +1455,13 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     }
     int dlen = strlen(dirname);
     /* find the matching files */
-    if(chdir(dirname)) {
+    if (chdir(dirname)) {
 	nct_puterror("chdir(dirname) in nct__get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
     strcpy(str, filename+ind+1);
     i = regcomp(&reg, str, regex_cflags);
-    if(i) {
+    if (i) {
 	char er[700];
 	regerror(i, &reg, er, 700);
 	nct_puterror("regcomp error:\n    %s\n", er);
@@ -1464,9 +1469,10 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     }
     num = 0;
     while ((entry = readdir(dp))) {
-	if(regexec(&reg, entry->d_name, 0, NULL, 0)) continue;
+	if (regexec(&reg, entry->d_name, 0, NULL, 0))
+	    continue;
 	int len = dlen + 1 + strlen(entry->d_name) + 1;
-	if(lmatch+len+1 > smatch) {
+	if (lmatch+len+1 > smatch) {
 	    smatch = lmatch + len + 1024;
 	    match = realloc(match, smatch);
 	}
@@ -1476,7 +1482,7 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     }
     closedir(dp);
     match[lmatch] = '\0'; // end with two null bytes;
-    if(chdir(getenv("PWD"))) {
+    if (chdir(getenv("PWD"))) {
 	nct_puterror("chdir in nct_get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
@@ -1492,7 +1498,7 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
 char* nct__sort_str(char* dst, const char* restrict src, int n) {
     const char *sptr, *mptr;
     char *dptr = dst;
-    if(n<=0) n = 4096;
+    if (n<=0) n = 4096;
     char used[n];
     memset(used, 0, n);
     int ind, mind, breakflag;
@@ -1502,9 +1508,9 @@ char* nct__sort_str(char* dst, const char* restrict src, int n) {
 	ind = mind = 0;
 	breakflag = 1;
 	while(*sptr) {
-	    if(!used[ind]) {
+	    if (!used[ind]) {
 		breakflag = 0;
-		if(!mptr || strcmp(sptr, mptr) < 0) {
+		if (!mptr || strcmp(sptr, mptr) < 0) {
 		    mptr = sptr;
 		    mind = ind;
 		}
@@ -1512,7 +1518,7 @@ char* nct__sort_str(char* dst, const char* restrict src, int n) {
 	    sptr += strlen(sptr)+1;
 	    ind++;
 	}
-	if(breakflag)
+	if (breakflag)
 	    goto out;
 	strcpy(dptr, mptr);
 	used[mind] = 1;
