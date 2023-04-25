@@ -1,6 +1,6 @@
 /* The dimension has to exist on v0->super and its length has to be already increased.
    Currently, the dimension has to also be the first one. */
-nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany_left) {
+static nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany_left) {
     v0->len = nct_get_len_from(v0, 0); // recalculate length since dimensions have been changed
     if(!v0->ndims || v0->dimids[0] != dimid0)
 	nct_add_vardim_first(v0, dimid0);
@@ -22,6 +22,64 @@ nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany
     void* ptr = v0->data + (v0->len - v1->len) * s1;
     memcpy(ptr, v1->data, v1->len*s1);
     return v0;
+}
+
+/* The dimension must be already expanded. */
+static nct_var* _nct_expand_var(nct_var* var, int vardim, int howmuch, int start0_end1, nct_any fill) {
+    size_t vlen0, vlen1, dlen0, dlen1, block0, block1, fillsize, nblocks;
+    vlen0 = var->len;
+    vlen1 = var->len = nct_get_len_from(var, 0);
+    dlen1 = nct_get_vardim(var, vardim)->len;
+    dlen0 = dlen1 - howmuch;
+    block1 = nct_get_len_from(var, vardim);
+    block0 = block1 / dlen1 * dlen0;
+    fillsize = block1 - block0;
+    nblocks = vlen0 / block0;
+    void *old, *now, *now0;
+    old = var->data;
+    int size1 = nctypelen(var->dtype);
+    now = now0 = malloc(vlen1 * size1);
+    if (!now)
+	nct_return_error(NULL);
+
+    if (start0_end1 == 1)	// expand in end
+	if (size1 == 1)
+	    for (int _i=0; _i<nblocks; _i++) {
+		memcpy(now, old, block0*size1);
+		old += block0*size1;
+		now += block0*size1;
+		memset(now, fill.hhu, fillsize);
+		now += fillsize;
+	    }
+	else
+	    for (int _i=0; _i<nblocks; _i++) {
+		memcpy(now, old, block0*size1);
+		old += block0*size1;
+		now += block0*size1;
+		for(int _j=0; _j<fillsize; _j++, now+=size1)
+		    memcpy(now, &fill, size1);
+	    }
+    else			// expand in start
+	if (size1 == 1)
+	    for (int _i=0; _i<nblocks; _i++) {
+		memset(now, fill.hhu, fillsize);
+		now += fillsize;
+		memcpy(now, old, block0*size1);
+		old += block0*size1;
+		now += block0*size1;
+	    }
+	else
+	    for (int _i=0; _i<nblocks; _i++) {
+		for(int _j=0; _j<fillsize; _j++, now+=size1)
+		    memcpy(now, &fill, size1);
+		memcpy(now, old, block0*size1);
+		old += block0*size1;
+		now += block0*size1;
+	    }
+
+    nct_unlink_data(var);
+    var->data = now0;
+    return var;
 }
 
 /* _nct_read_var_info must be called first for all variables */
