@@ -1459,7 +1459,15 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
 	nct_puterror("chdir(dirname) in nct__get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
-    strcpy(str, filename+ind+1);
+    /* If argument was "dir/foo.txt", we don't to match "dir/1234foo.txt".
+       If argument was "foo.txt", we want to match "1234foo.txt".
+       Hence we check if dirname was given and in that case precede the filename with '^'. */
+    if (filename[ind] == '/') {
+	str[0] = '^';
+	strcpy(str+1, filename+ind+1);
+    }
+    else
+	strcpy(str, filename+ind+1);
     i = regcomp(&reg, str, regex_cflags);
     if (i) {
 	char er[700];
