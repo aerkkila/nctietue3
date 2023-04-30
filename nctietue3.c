@@ -195,7 +195,7 @@ nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name)
     return nct_add_var(set, src, dtype, name, ndims, dimids);
 }
 
-void nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable) {
+nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable) {
     void* vp;
     if(var->attcapacity < var->natts+1) {
 	if(!(vp=realloc(var->atts, (var->attcapacity=var->natts+3)*sizeof(nct_att))))
@@ -207,14 +207,14 @@ void nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeabl
 					 .dtype    = NC_CHAR,
 					 .len      = value? strlen(value)+1: 0,
 					 .freeable = freeable };
-    return;
+    return var->atts + var->natts-1;
 failed:
     startpass;
     var->attcapacity = var->natts;
     nct_puterror("realloc failed in nct_add_varatt_text.\n");
     print_varerror(var, "    ");
-    nct_other_error;
-    endpass;
+    nct_return_error(NULL);
+    endpass; // TODO: this is never reached which is a bug
 }
 
 nct_var* nct_add_vardim_first(nct_var* var, int dimid) {

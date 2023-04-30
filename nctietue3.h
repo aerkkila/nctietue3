@@ -148,7 +148,7 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 /* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
 nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
-void nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
+nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
