@@ -229,10 +229,9 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
 }
 
 /* Concatenation is not yet supported along other existing dimensions than the first one.
-   Trying to concatenate an loaded and unloaded variable is undefined behaviour.
    Coordinates will be loaded if aren't already.
-   Variable will not be loaded if aren't already.
-   In that case, concatenated sets must not be freed before loading data.
+   Variable will not be loaded, except if the first is loaded and the second is not.
+   When unloaded sets are concatenated, they must not be freed before loading the data.
    The following is hence an error:
    *	concat(set0, set1) // var n is not loaded
    *	free(set1)
@@ -259,6 +258,8 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    }
 	    return vs0;
 	}
+	else
+	    dimname++; // dismiss the hyphen
     }
     /* Now dimname is either existing dimension or one to be created. */
     dimid0 = nct_get_dimid(vs0, dimname);
@@ -898,7 +899,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
     size_t start[ndims], count[ndims];
 
-    if (!(hasrule(set, nct_r_start)) || nct_iscoord(var))
+    if (!hasrule(set, nct_r_start) || nct_iscoord(var))
 	goto no_startrule;
 
     for(int i=0; i<ndims; i++) {
@@ -981,12 +982,15 @@ no_startrule:
     if (!hasrule(var, nct_r_concat))
 	return var;
     /* concatenation */
-    dataptr = var->data + var->len*nctypelen(var->dtype);
+    int filelen_from_1 = 1;
+    for(int i=1; i<nct_maxdims; i++)
+	filelen_from_1 *= var->filedimensions[i];
+    dataptr = var->data + filelen_from_1 * var->filedimensions[0] * nctypelen(var->dtype);
     int n = var->rule[nct_r_concat].n;
     for(int i=0; i<n; i++) {
 	nct_var* var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[i];
 	ncfunk(getfulldata, var1->super->ncid, var1->ncid, dataptr);
-	dataptr += var1->len*nctypelen(var->dtype);
+	dataptr += filelen_from_1 * var1->filedimensions[0] * nctypelen(var->dtype);
     }
     return var;
 }
@@ -1230,6 +1234,8 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
 	    var->filedimensions[i] = len1;
 	    len *= len1;
 	}
+	for(int i=ndims; i<nct_maxdims; i++)
+	    var->filedimensions[i] = 1;
 	var->len = len;
 	if (too_many)
 	    var->len = nct_get_len_from(var, 0);
@@ -1316,6 +1322,27 @@ read_and_load:
     }
     return set;
 }
+
+nct_set* nct_read_mfnc_ptrptr(char** filenames, int nfiles, char* dim) {
+    int len = 0;
+    int n = 0;
+    while (n!=nfiles && filenames[n]) {
+	len += strlen(filenames[n]) + 1;
+	n++;
+    }
+    char* files = malloc(len+1);
+    char* ptr = files;
+    for(int i=0; i<n; i++) {
+	int a = strlen(filenames[i]) + 1;
+	memcpy(ptr, filenames[i], a);
+	ptr += a;
+    }
+    *ptr = 0;
+    nct_set* set = nct_read_mfnc_ptr(files, n, dim);
+    free(files);
+    return set;
+}
+
 
 nct_var* nct_rename(nct_var* var, char* name, int freeable) {
     if (var->freeable_name)

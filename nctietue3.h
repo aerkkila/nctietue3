@@ -323,13 +323,18 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type typ
  *	nct_readm_nc(set, "some.nc");
  */
 #define  nct_read_nc(name) nct_read_ncf(name, nct_readflags)
+#define  nct_read_nc_gd(set, name) nct_read_ncf_gd(set, name, nct_readflags)
 #define  nct_readm_ncf(set, name, flags) nct_set set; nct_read_ncf_gd(&set, name, flags)
 #define  nct_readm_nc(set, name) nct_readm_ncf(set, name, nct_readflags)
 nct_set* nct_read_ncf(const char*, int flags);
 nct_set* nct_read_ncf_gd(nct_set*, const char*, int flags);
 
-nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concatdim);
-nct_set* nct_read_mfnc_ptr(const char* filename, int n, char* concatdim);
+nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
+/* filenames must be in the form of the result of nct__get_filenames. */
+nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
+/* If n is negative, then filenames must be null-terminated.
+   This calls nct_read_mfnc_ptr after having converted filenames into form of its argument. */
+nct_set* nct_read_mfnc_ptrptr(char** filenames, int n, char* concatdim);
 
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
