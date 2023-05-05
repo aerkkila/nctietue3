@@ -1548,16 +1548,25 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
 	nct_return_error(NULL);
     }
     char* sorted = malloc(lmatch+1);
-    nct__sort_str(sorted, match, num, fun? *dest: NULL, size1dest);
+    void* sorted_dest = fun ? malloc(lmatch*size1dest) : NULL;
+    void* destarr[2] = {sorted_dest};
+    if (fun)
+	destarr[1] = *dest;
+    nct__sort_str(sorted, match, num, fun? destarr: NULL, size1dest);
+    if (fun) {
+	free(*dest);
+	*dest = sorted_dest;
+    }
     free(match);
     free(dirname);
     regfree(&reg);
     return sorted;
 }
 
-/* Selection sort that does not change src. Other is an optional array which is sorted like src. */
-char* nct__sort_str(char* dst, const char* restrict src, int n, void* other, int size1other) {
-    const char *sptr, *mptr;
+/* Selection sort that does not change src.
+ * Other is an optional array which is sorted like src. other[0] is dest and other[1] is src. */
+char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], int size1other) {
+    const char *sptr, *strptr;
     char *dptr = dst;
     if (n <= 0) {
 	n = 0;
@@ -1565,18 +1574,19 @@ char* nct__sort_str(char* dst, const char* restrict src, int n, void* other, int
     }
     char used[n];
     memset(used, 0, n);
-    int ind, mind, breakflag, n_sorted=0;
+    int ind, indstr, breakflag, n_sorted=0;
+    /* Each loop finds one element which is inserted at the start of the unsorted space. */
     while(1) {
 	sptr = src;
-	mptr = NULL;
-	ind = mind = 0;
+	strptr = NULL;
+	ind = indstr = 0;
 	breakflag = 1;
 	while(*sptr) {
 	    if (!used[ind]) {
 		breakflag = 0;
-		if (!mptr || strcmp(sptr, mptr) < 0) {
-		    mptr = sptr;
-		    mind = ind;
+		if (!strptr || strcmp(sptr, strptr) < 0) {
+		    strptr = sptr;
+		    indstr = ind;
 		}
 	    }
 	    sptr += strlen(sptr)+1;
@@ -1584,16 +1594,12 @@ char* nct__sort_str(char* dst, const char* restrict src, int n, void* other, int
 	}
 	if (breakflag) // all members were used
 	    goto out;
-	strcpy(dptr, mptr);
-	used[mind] = 1;
+	strcpy(dptr, strptr);
+	used[indstr] = 1;
 	dptr += strlen(dptr)+1;
-	if (other) {
-	    char help[size1other];
-	    memcpy(help,			other+mind*size1other,		size1other);
-	    memcpy(other+mind*size1other,	other+n_sorted*size1other,	size1other);
-	    memcpy(other+n_sorted*size1other,	help,				size1other);
-	    n_sorted++;
-	}
+	if (other)
+	    memcpy(other[0]+n_sorted*size1other, other[1]+indstr*size1other, size1other);
+	n_sorted++;
     }
 out:
     *dptr = '\0';

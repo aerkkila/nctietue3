@@ -435,7 +435,7 @@ char* nct__get_filenames_(
 
 /* src has the form of result of nct__get_filenames.
    n is optional: if -1 if given, n is calculated.
-   other is an optional array which will be sorted like src, if given. */
-char* nct__sort_str(char* dest, const char* restrict src, int n, void* other, int size1other);
+   other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given. */
+char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other);
 
 #endif
