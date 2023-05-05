@@ -699,6 +699,7 @@ void nct_free1(nct_set* set) {
 	set->ncid = 0;
     }
     endpass;
+    free(set->filename);
     if hasrule(set, nct_r_list) {
 	nct_set* ptr = set;
 	nct_set nullset = {0};
@@ -885,6 +886,18 @@ void nct_allocate_varmem(nct_var* var) {
     nct_other_error;
 }
 
+static void perhaps_close_the_file(nct_set* set) {
+    if (set->ncid > 0 && !(nct_readflags & nct_rkeep)) {
+	ncfunk(nc_close, set->ncid);
+	set->ncid = 0;
+    }
+}
+
+static void perhaps_open_the_file(nct_var* var) {
+    if (var->super->ncid <= 0 && var->super->filename)
+	ncfunk(nc_open, var->super->filename, NC_NOWRITE, &var->super->ncid);
+}
+
 nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     if (dtype != NC_NAT) {
 	if (var->dtype)
@@ -899,6 +912,8 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
     size_t start[ndims], count[ndims];
 
+    perhaps_open_the_file(var);
+
     if (!hasrule(set, nct_r_start) || nct_iscoord(var))
 	goto no_startrule;
 
@@ -909,10 +924,11 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     }
     if (!hasrule(var, nct_r_concat)) {
 	ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
+	perhaps_close_the_file(var->super);
 	return var;
     }
 
-    /* We must deside whence to get the data when having both start and concat rules. */
+    /* Whence to get the data when having both start and concat rules. */
     nct_var* dim0 = nct_get_vardim(var, 0);
     int startloc = dim0->rule[nct_r_start].arg.lli;
     int length = var->filedimensions[0];
@@ -950,6 +966,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     else { // This file is enough
 	count[0] = target_size;
 	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+	perhaps_close_the_file(var->super);
 	return var;
     }
 
@@ -957,11 +974,13 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     start[0] = 0;
     while(filei < nfiles) {
 	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
+	perhaps_open_the_file(var1);
 	current_size += var1->filedimensions[0];
 	if (current_size >= target_size)
 	    goto last_file;
 	count[0] = var1->filedimensions[0];
 	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+	perhaps_close_the_file(var1->super);
 	dataptr += (count_1plus * count[0]) * nctypelen(var->dtype);
     }
     nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i, startloc = %i\n",
@@ -971,6 +990,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 last_file:
     count[0] = target_size - (current_size - var1->filedimensions[0]); // how much target_size if after the previous file
     ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
+    perhaps_close_the_file(var1->super);
     return var;
 
 no_startrule:
@@ -978,6 +998,7 @@ no_startrule:
        because nct_free wouldn't know whether to rewind var->data or not. */
     nct_ncget_t getfulldata = nct_getfun[dtype];
     ncfunk(getfulldata, var->super->ncid, var->ncid, var->data);
+    perhaps_close_the_file(var->super);
     var->data += var->rule[nct_r_start].arg.lli * nctypelen(var->dtype); // only meant for coordinate variables
     if (!hasrule(var, nct_r_concat))
 	return var;
@@ -989,7 +1010,9 @@ no_startrule:
     int n = var->rule[nct_r_concat].n;
     for(int i=0; i<n; i++) {
 	nct_var* var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[i];
+	perhaps_open_the_file(var1);
 	ncfunk(getfulldata, var1->super->ncid, var1->ncid, dataptr);
+	perhaps_close_the_file(var1->super);
 	dataptr += filelen_from_1 * var1->filedimensions[0] * nctypelen(var->dtype);
     }
     return var;
@@ -1138,20 +1161,26 @@ void nct_print(const nct_set* set) {
 }
 
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {
-    if (flags & nct_rlazy)
+    if (flags & nct_rlazy) {
+	perhaps_close_the_file(s);
 	return s;
+    }
+    unsigned old = nct_readflags;
+    nct_readflags = flags | nct_rkeep; // don't close and reopen on each variable
     if (flags & nct_rcoord) {
 	int ndims = s->ndims;
 	for(int i=0; i<ndims; i++)
 	    if (nct_iscoord(s->dims[i]))
 		nct_load(s->dims[i]);
+	nct_readflags = old;
+	perhaps_close_the_file(s);
 	return s;
     }
     int nvars = s->nvars;
     for(int i=0; i<nvars; i++)
 	nct_load(s->vars[i]);
-    ncfunk(nc_close, s->ncid);
-    s->ncid = 0;
+    nct_readflags = old;
+    perhaps_close_the_file(s);
     return s;
 }
 
@@ -1212,6 +1241,7 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
 	.nvars = nvars,
 	.dimcapacity = ndims + 1,
 	.varcapacity = nvars + 3,
+	.filename = strdup(filename),
     };
     dest->dims = calloc(dest->dimcapacity, sizeof(void*));
     dest->vars = calloc(dest->varcapacity, sizeof(void*));
@@ -1435,7 +1465,7 @@ static int _nct_create_nc(const nct_set* src, const char* name, int what) {
 	    continue;
 	int unlink = 0;
 	if(!v->data) {
-	    if(v->super->ncid > 0) {
+	    if(v->super->ncid > 0 || v->super->filename) {
 		nct_load(v);
 		unlink = 1;
 	    }

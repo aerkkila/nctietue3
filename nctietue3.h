@@ -120,14 +120,15 @@ struct nct_var {
 };
 
 struct nct_set {
-    int       nvars, varcapacity;
-    nct_var** vars;
-    int       ndims, dimcapacity;
-    nct_var** dims; // points to a variable with the same name if available
-    int       natts, attcapacity;
-    nct_att*  atts;
-    int       ncid, owner;
-    unsigned  rules; // a bitmask of rules which are in use
+    int		nvars, varcapacity;
+    nct_var**	vars;
+    int		ndims, dimcapacity;
+    nct_var**	dims; // points to a variable with the same name if available
+    int		natts, attcapacity;
+    nct_att*	atts;
+    int		ncid, owner;
+    char*	filename;
+    unsigned	rules; // a bitmask of rules which are in use
 };
 
 struct nct_anyd {
@@ -136,7 +137,7 @@ struct nct_anyd {
 };
 
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
-#define nct_loadable(var) ((var)->super->ncid > 0)
+#define nct_loadable(var) ((var)->super->ncid > 0 || (var)->super->filename)
 
 /* nct_var has negative id if the variable is dimension or coordinate */
 #define nct_coordid(id) (-(id)-1)
@@ -287,20 +288,25 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  * nct_rlazy:
  *	Data is not loaded nor memory allocated.
  *	Data must be loaded with nct_load or similar function.
- *      File is left open for reading, ncid stays valid, nct_free will close the file.
  * nct_rcoord:
  *	Like nct_rlazy but coordinate variables are loaded.
  *	nct_rlazy | nct_rcoord is undefined behaviour.
  * default:
  *      Everything is read at once.
- *      File is closed, ncid becomes invalid.
  *
  * nct_ratt:
  *	Read attributes.
  * default:
  *	Ignore attributes.
+ *
+ * nct_rkeep:
+ *	Read files are kept open. This can lead to Netcdf error: too many open files,
+ *	but avoids reopening them on nct_load if nct_rlazy or nct_rcoord is used.
+ *	nct_free will close the file
+ * default:
+ *	Files are closed after reading the metadata and reopened on nct_load.
  */
-enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2,};
+enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.
