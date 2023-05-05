@@ -1259,8 +1259,13 @@ nct_set* nct_read_ncf_gd(nct_set* s, const char* filename, int flags) {
    */
 
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
-    char* names = nct__get_filenames(filename, 0);
-    int num = (intptr_t)nct__get_filenames(NULL, 0); // returns the number of files read on previous call
+    return nct_read_mfnc_regex_(filename, regex_cflags, dim, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim,
+	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
+    char* names = nct__get_filenames_(filename, 0, matchfun, size1, nmatch, matchdest);
+    int num = nct__getn_filenames(); // returns the number of files read on previous call
     if (num == 0) {
 	free(names);
 	nct_puterror("No files match \"%s\"\n", filename);
@@ -1463,6 +1468,11 @@ void nct_write_nc(const nct_set* src, const char* name) {
 }
 
 char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
+    return nct__get_filenames_(filename, regex_cflags, NULL, 0, 0, NULL);
+}
+
+char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
+	void (*fun)(const char* restrict, int, regmatch_t* pmatch, void*), int size1dest, int nmatch, void** dest) {
     static int num;
     if (!filename)
 	return (char*)(intptr_t)num;
@@ -1472,8 +1482,10 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
     struct dirent *entry;
     regex_t reg;
     char* dirname = NULL;
-    int smatch = 2048, lmatch=0;
+    int smatch = 2048, lmatch=0; // space-of-match, length-of-match
     char* match = malloc(smatch);
+    if (fun)
+	*dest = malloc(smatch*size1dest);
     for (i=0; filename[i]; i++)
 	if (filename[i] == '/')
 	    ind = i;
@@ -1511,40 +1523,49 @@ char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
 	nct_return_error(NULL);
     }
     num = 0;
+    nmatch *= !!fun;
+    regmatch_t pmatch[nmatch];
     while ((entry = readdir(dp))) {
-	if (regexec(&reg, entry->d_name, 0, NULL, 0))
+	if (regexec(&reg, entry->d_name, nmatch, pmatch, 0))
 	    continue;
 	int len = dlen + 1 + strlen(entry->d_name) + 1;
 	if (lmatch+len+1 > smatch) {
 	    smatch = lmatch + len + 1024;
 	    match = realloc(match, smatch);
+	    if (fun)
+		*dest = realloc(*dest, smatch*size1dest);
 	}
 	sprintf(match+lmatch, "%s/%s", dirname, entry->d_name);
+	if (fun)
+	    fun(entry->d_name, num, pmatch, *dest);
 	lmatch += len;
 	num++;
     }
     closedir(dp);
     match[lmatch] = '\0'; // end with two null bytes;
     if (chdir(getenv("PWD"))) {
-	nct_puterror("chdir in nct_get_filenames: %s", strerror(errno));
+	nct_puterror("chdir in nct__get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
     char* sorted = malloc(lmatch+1);
-    nct__sort_str(sorted, match, num);
+    nct__sort_str(sorted, match, num, fun? *dest: NULL, size1dest);
     free(match);
     free(dirname);
     regfree(&reg);
     return sorted;
 }
 
-/* Selection sort that does not change src. */
-char* nct__sort_str(char* dst, const char* restrict src, int n) {
+/* Selection sort that does not change src. Other is an optional array which is sorted like src. */
+char* nct__sort_str(char* dst, const char* restrict src, int n, void* other, int size1other) {
     const char *sptr, *mptr;
     char *dptr = dst;
-    if (n<=0) n = 4096;
+    if (n <= 0) {
+	n = 0;
+	nct__forstr(src, s) n++;
+    }
     char used[n];
     memset(used, 0, n);
-    int ind, mind, breakflag;
+    int ind, mind, breakflag, n_sorted=0;
     while(1) {
 	sptr = src;
 	mptr = NULL;
@@ -1561,11 +1582,18 @@ char* nct__sort_str(char* dst, const char* restrict src, int n) {
 	    sptr += strlen(sptr)+1;
 	    ind++;
 	}
-	if (breakflag)
+	if (breakflag) // all members were used
 	    goto out;
 	strcpy(dptr, mptr);
 	used[mind] = 1;
 	dptr += strlen(dptr)+1;
+	if (other) {
+	    char help[size1other];
+	    memcpy(help,			other+mind*size1other,		size1other);
+	    memcpy(other+mind*size1other,	other+n_sorted*size1other,	size1other);
+	    memcpy(other+n_sorted*size1other,	help,				size1other);
+	    n_sorted++;
+	}
     }
 out:
     *dptr = '\0';

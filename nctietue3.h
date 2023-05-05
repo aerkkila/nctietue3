@@ -5,6 +5,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stddef.h>
+#include <regex.h> // regmatch_t
 
 typedef struct nct_set nct_set;
 typedef struct nct_var nct_var;
@@ -330,6 +331,9 @@ nct_set* nct_read_ncf(const char*, int flags);
 nct_set* nct_read_ncf_gd(nct_set*, const char*, int flags);
 
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
+/* See nct__get_filenames. */
+nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* concatdim,
+	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest);
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
@@ -395,13 +399,43 @@ nct_var*  nct_meannan_first(nct_var*);
 
 /* These functions work independently from this library (except using the error handling) but are needed in some functions. */
 
-/* result is in form "name1\0name2\0name3\0last_name\0\0"
-   If name == NULL, returns numbers of names matched on previous call as intptr_t.
-   char* argument is a regular expression */
-char* nct__get_filenames(const char* restrict, int regex_cflags);
+/* Returns existing filenames that match a regular expression.
+ * regex:
+ *	A regular expression.
+ *	In regex = "dir/file", dir is matched literally and file as a regular expression but preceeded with ^ (start of line).
+ * regex_cflags:
+ *	See cflags in man regex. If unsure, say 0. If things don't work, say REGEX_EXTENDED.
+ *
+ * Rest of the arguments are for extracting data from the matched filenames.
+ * fun:
+ *	arg0 (const char* restrict):	A filename which matched regex.
+ *	arg1 (int): 			number of found matches before this one. i.e. a growing number from zero.
+ *	arg2 (regmatch_t*): 		Result from regexec. See man regex for details.
+ *	arg3 (void*):			An array whither fun can write some data.
+ * size1: 	how much space should be allocated per filename to be used in fun as arg3
+ * nmatch:	how many matches (regmatch_t) from one filename.
+ *		First match the whole matched expression and then capture groups i.e. \([0-9]*\).
+ * dest (out):	pointer to the array where data was written in fun. Space is allocated into heap in this function.
+ *
+ * Returns:
+ * 	Matched filenames in form of "name1\0name2\0name3\0last_name\0\0"
+ * 	If name == NULL, returns numbers of names matched on previous call as intptr_t.
+ */
+char* nct__get_filenames(const char* restrict regex, int regex_cflags);
+char* nct__get_filenames_(
+	const char* restrict regex,
+	int regex_cflags,
+	void (*fun)(const char* restrict, int, regmatch_t*, void*),
+	int size1,
+	int nmatch,
+	void** dest
+	);
+#define nct__getn_filenames() ((intptr_t)nct__get_filenames(NULL, 0))
+#define nct__forstr(names, str) for(char* str=((char*)names); *str; str+=strlen(str)+1) // iterating over the result of nct__get_filenames
 
 /* src has the form of result of nct__get_filenames.
-   n is optional: if -1 if given, n is calculated. */
-char* nct__sort_str(char* dest, const char* restrict src, int n);
+   n is optional: if -1 if given, n is calculated.
+   other is an optional array which will be sorted like src, if given. */
+char* nct__sort_str(char* dest, const char* restrict src, int n, void* other, int size1other);
 
 #endif
