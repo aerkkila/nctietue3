@@ -2,7 +2,7 @@ include config.mk
 
 all: libnctietue3.so
 
-nctietue3.o: nctietue3.c nctietue3.h internals.h
+nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h
 	$(CC) $(CFLAGS) -o $@ -c $<
 
 functions.o: functions.c function_wrappers.c

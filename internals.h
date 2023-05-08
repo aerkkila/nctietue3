@@ -91,6 +91,7 @@ static void _nct_read_dim(nct_set* set, int dimid) {
     ncfunk(nc_inq_dim, set->ncid, dimid, name, &len);
     if ((varid = nct_get_varid(set, name)) >= 0) {
 	(*v = set->vars[varid]) -> len = len;
+	(*v)->filedimensions[0] = len;
 	(*v)->id = nct_coordid((*v)->id);
 	return;
     }

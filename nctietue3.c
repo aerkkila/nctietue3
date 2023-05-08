@@ -898,6 +898,8 @@ static void perhaps_open_the_file(nct_var* var) {
 	ncfunk(nc_open, var->super->filename, NC_NOWRITE, &var->super->ncid);
 }
 
+#include "load_data.h"
+#if 0
 nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     if (dtype != NC_NAT) {
 	if (var->dtype)
@@ -1017,6 +1019,7 @@ no_startrule:
     }
     return var;
 }
+#endif
 
 /* In nct_localtime, the argument (nct_anyd)time0 should be the return value from nct_mktime0.
    The right static function (nct_localtime_$timestep) is called based on that. */
@@ -1388,7 +1391,8 @@ nct_var* nct_rename(nct_var* var, char* name, int freeable) {
 }
 
 nct_var* nct_rewind(nct_var* var) {
-    var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
+    if (var->data)
+	var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
     return var;
 }
 

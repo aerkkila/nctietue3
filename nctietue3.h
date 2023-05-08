@@ -106,11 +106,11 @@ struct nct_var {
     char*    name;
     char     freeable_name;
     int      ndims, dimcapacity;
-    int*     dimids; // staattinen määrä muistia kelvanneisi
+    int*     dimids; // dimensions in the virtual file which may consist of multiple real files
     int      natts, attcapacity;
     nct_att* atts;
     size_t   len, capacity;
-    int      filedimensions[nct_maxdims]; // set when reading and not changed by any function
+    int      filedimensions[nct_maxdims]; // how much to read at maximum from the real file
     nc_type  dtype;
     int      not_freeable;
     unsigned char* nusers; // the first user is not counted
