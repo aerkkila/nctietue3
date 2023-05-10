@@ -69,7 +69,7 @@ int nct_nlinked_vars=0;
 #define nct_nlinked_max 256
 unsigned char nct_nusers[nct_nlinked_max] = {0};
 
-int nct_readflags, nct_ncret, nct_error_action;
+int nct_readflags, nct_ncret, nct_error_action, nct_verbose;
 FILE* nct_stderr;
 
 const char* nct_error_color   = "\033[1;91m";
@@ -898,128 +898,7 @@ static void perhaps_open_the_file(nct_var* var) {
 	ncfunk(nc_open, var->super->filename, NC_NOWRITE, &var->super->ncid);
 }
 
-#include "load_data.h"
-#if 0
-nct_var* nct_load_as(nct_var* var, nc_type dtype) {
-    if (dtype != NC_NAT) {
-	if (var->dtype)
-	    var->capacity *= nctypelen(dtype) / nctypelen(var->dtype);
-	var->dtype = dtype;
-    }
-    nct_allocate_varmem(var);
-
-    nct_set* set = var->super;
-    int* dimids = var->dimids;
-    int ndims = var->ndims;
-    nct_ncget_partial_t getdata = nct_getfun_partial[dtype];
-    size_t start[ndims], count[ndims];
-
-    perhaps_open_the_file(var);
-
-    if (!hasrule(set, nct_r_start) || nct_iscoord(var))
-	goto no_startrule;
-
-    for(int i=0; i<ndims; i++) {
-	nct_var* dim = set->dims[dimids[i]];
-	start[i] = dim->rule[nct_r_start].arg.lli; // can be read even if not in use, then 0
-	count[i] = dim->len;
-    }
-    if (!hasrule(var, nct_r_concat)) {
-	ncfunk(getdata, var->super->ncid, var->ncid, start, count, var->data);
-	perhaps_close_the_file(var->super);
-	return var;
-    }
-
-    /* Whence to get the data when having both start and concat rules. */
-    nct_var* dim0 = nct_get_vardim(var, 0);
-    int startloc = dim0->rule[nct_r_start].arg.lli;
-    int length = var->filedimensions[0];
-    nct_var* var1 = var;
-    int filei = 0;
-    int nfiles = var->rule[nct_r_concat].n; // How many to concatenate. Real number of files is one more.
-    while (1) {
-	if (filei >= nfiles)
-	    break;
-	if (length >= startloc)
-	    break;
-	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
-	length += var1->filedimensions[0];
-    }
-    if (startloc >= length) {
-	nct_puterror("startlocation > length: filei = %i, length = %i\n", filei, length);
-	nct_return_error(var); // nothing can be read
-    }
-    int dim0start = startloc - (length - var1->filedimensions[0]); // how much after the end of the previous file
-    int target_size = dim0->len;
-    int current_size = length - startloc;
-    void* dataptr = var->data;
-
-    size_t count_1plus = 1;
-    for(int i=1; i<ndims; i++)
-	count_1plus *= count[i];
-
-    /* Read the first file. */
-    start[0] = dim0start;
-    if (current_size < target_size) { // This file is not enough.
-	count[0] = var1->filedimensions[0] - dim0start;
-	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-	dataptr += (count_1plus * count[0]) * nctypelen(var->dtype);
-    }
-    else { // This file is enough
-	count[0] = target_size;
-	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-	perhaps_close_the_file(var->super);
-	return var;
-    }
-
-    /* The middle files which can be read from start to end. */
-    start[0] = 0;
-    while(filei < nfiles) {
-	var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[filei++];
-	perhaps_open_the_file(var1);
-	current_size += var1->filedimensions[0];
-	if (current_size >= target_size)
-	    goto last_file;
-	count[0] = var1->filedimensions[0];
-	ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-	perhaps_close_the_file(var1->super);
-	dataptr += (count_1plus * count[0]) * nctypelen(var->dtype);
-    }
-    nct_puterror("Not enough data, last file passed: nfiles = %i, current_size = %i, target_size = %i, startloc = %i\n",
-	    nfiles, current_size, target_size, startloc);
-    nct_return_error(var);
-
-last_file:
-    count[0] = target_size - (current_size - var1->filedimensions[0]); // how much target_size if after the previous file
-    ncfunk(getdata, var1->super->ncid, var1->ncid, start, count, dataptr);
-    perhaps_close_the_file(var1->super);
-    return var;
-
-no_startrule:
-    /* Coordinate variables are never loaded partially
-       because nct_free wouldn't know whether to rewind var->data or not. */
-    nct_ncget_t getfulldata = nct_getfun[dtype];
-    ncfunk(getfulldata, var->super->ncid, var->ncid, var->data);
-    perhaps_close_the_file(var->super);
-    var->data += var->rule[nct_r_start].arg.lli * nctypelen(var->dtype); // only meant for coordinate variables
-    if (!hasrule(var, nct_r_concat))
-	return var;
-    /* concatenation */
-    int filelen_from_1 = 1;
-    for(int i=1; i<nct_maxdims; i++)
-	filelen_from_1 *= var->filedimensions[i];
-    dataptr = var->data + filelen_from_1 * var->filedimensions[0] * nctypelen(var->dtype);
-    int n = var->rule[nct_r_concat].n;
-    for(int i=0; i<n; i++) {
-	nct_var* var1 = ((nct_var**)var->rule[nct_r_concat].arg.v)[i];
-	perhaps_open_the_file(var1);
-	ncfunk(getfulldata, var1->super->ncid, var1->ncid, dataptr);
-	perhaps_close_the_file(var1->super);
-	dataptr += filelen_from_1 * var1->filedimensions[0] * nctypelen(var->dtype);
-    }
-    return var;
-}
-#endif
+#include "load_data.h" // nct_load_as
 
 /* In nct_localtime, the argument (nct_anyd)time0 should be the return value from nct_mktime0.
    The right static function (nct_localtime_$timestep) is called based on that. */

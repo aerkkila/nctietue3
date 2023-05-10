@@ -2,10 +2,16 @@
 #define MIN(a, b) ((a) <= (b) ? a : (b))
 
 typedef struct {
+    /* constants after initialization */
     int size1;
-    size_t *fstart, *fcount, pos, ndata, start;
-    void* data;
+    size_t ndata;
     nct_ncget_partial_t getfun;
+    /* mutable variables */
+    size_t *fstart, *fcount, start;
+    /* restricted: only incremented at loading */
+    size_t pos;
+    void* data;
+    int ifile; // only used for printing progress (nct_verbose)
 } loadinfo_t;
 
 static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
@@ -75,7 +81,7 @@ static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
 	if (try > maxsize)
 	    break;
 	len = try;
-    } 
+    }
     memset(rect, 0, (i+1)*sizeof(rect[0]));
     return len;
 }
@@ -108,6 +114,15 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     return len;
 }
 
+static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
+    printf("Loading %zu %% (%zu / %zu); file %i: %s",
+	    (info->pos+len)*100/info->ndata, info->pos, info->ndata, info->ifile, var->super->filename);
+    if (nct_verbose == nct_verbose_newline)
+	putchar('\n');
+    else if (nct_verbose == nct_verbose_overwrite)
+	printf("\033[K\r"), fflush(stdout);
+}
+
 static int next_load(nct_var* var, loadinfo_t* info) {
     size_t start_thisfile;
     int filenum;
@@ -117,6 +132,8 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	return 1; // an error which shouldn't happen
     if (filenum == 0) {
 	size_t len = set_info(var, info, start_thisfile);
+	if (nct_verbose)
+	    print_progress(var, info, len);
 	load_for_real(var, info);
 	info->data += len * info->size1;
 	info->pos += len;
@@ -175,6 +192,8 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     while (!next_load(var, &info));
     if (var->len != info.pos)
 	nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, var->len);
+    if (nct_verbose == nct_verbose_overwrite)
+	printf("\033[K"), fflush(stdout);
     return var;
 }
 

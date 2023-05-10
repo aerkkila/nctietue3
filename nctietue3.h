@@ -64,6 +64,11 @@ extern const char* nct_default_color;
 enum {nct_auto, nct_interrupt, nct_pass};
 extern int nct_error_action;
 
+/* Set this as nonzero to print progress in some functions. Currently only in nct_load.
+   To disable error messages, use nct_stderr instead of this. */
+extern int nct_verbose;
+enum {nct_verbose_overwrite=1, nct_verbose_newline};
+
 union nct_any {
     char hhi;
     char c;
