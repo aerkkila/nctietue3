@@ -35,7 +35,7 @@ static nct_var* get_var_from_filenum(nct_var* var, int num) {
 
 static size_t get_filelen(const nct_var* var) {
     size_t len = 1;
-    for(int i=var->ndims-1; i>=0; i--)
+    for(int i=var->nfiledims-1; i>=0; i--)
 	len *= var->filedimensions[i];
     return len;
 }
@@ -88,17 +88,18 @@ static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
 
 /* fstart, fcount */
 static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
-    for(int i=var->ndims-1; i>=0; i--) {
-	nct_var* dim = nct_get_vardim(var, i);
+    int n_extra = var->ndims - var->nfiledims;
+    for(int i=var->nfiledims-1; i>=0; i--) {
+	nct_var* dim = nct_get_vardim(var, i+n_extra);
 	info->fstart[i] = dim->rule[nct_r_start].arg.lli;
 	info->fcount[i] = MIN(var->filedimensions[i] - info->fstart[i], dim->len);
     }
     /* startpos */
     size_t move[nct_maxdims] = {0};
     move[var->ndims-1] = startpos;
-    make_coordinates(move, info->fcount, var->ndims);
+    make_coordinates(move, info->fcount, var->nfiledims);
     int first = 1;
-    for(int i=var->ndims-1; i>=0; i--) {
+    for(int i=var->nfiledims-1; i>=0; i--) {
 	if (move[i]) {
 	    info->fstart[i] += move[i];
 	    if (first)
@@ -110,13 +111,13 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 	    info->fcount[i] = 0;
     }
     /* Make sure not to read more than asked. */
-    size_t len = limit_rectangle(info->fcount, var->ndims, info->ndata - info->pos);
+    size_t len = limit_rectangle(info->fcount, var->nfiledims, info->ndata - info->pos);
     return len;
 }
 
 static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
-    printf("Loading %zu %% (%zu / %zu); file %i: %s",
-	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, info->ifile, var->super->filename);
+    printf("Loading %zu %% (%zu / %zu); %zu from %i: %s",
+	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, len, info->ifile, var->super->filename);
     if (nct_verbose == nct_verbose_newline)
 	putchar('\n');
     else if (nct_verbose == nct_verbose_overwrite)

@@ -106,16 +106,17 @@ struct nct_att {
 #define nct_maxdims 5
 struct nct_var {
     nct_set* super;
-    int      id,   // nct_id(id) is location of this in set->vars, if exists there, otherwise in set->dims
-	     ncid; // ncid of the variable if this is a coordinate (both dim and var)
+    int      id_dim,	// location of this in set->dims + 1, if exists there
+	     id_var,	// location of this in set->vars + 1, if exists there
+	     ncid;	// ncid of the variable if this is a coordinate (both dim and var)
     char*    name;
     char     freeable_name;
-    int      ndims, dimcapacity;
+    int      ndims, nfiledims, dimcapacity;
     int*     dimids; // dimensions in the virtual file which may consist of multiple real files
     int      natts, attcapacity;
     nct_att* atts;
     size_t   len, capacity;
-    int      filedimensions[nct_maxdims]; // how much to read at maximum from the real file
+    long     filedimensions[nct_maxdims]; // how much to read at maximum from the real file
     nc_type  dtype;
     int      not_freeable;
     unsigned char* nusers; // the first user is not counted
@@ -144,10 +145,11 @@ struct nct_anyd {
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
 #define nct_loadable(var) ((var)->super->ncid > 0 || (var)->super->filename)
 
-/* nct_var has negative id if the variable is dimension or coordinate */
-#define nct_coordid(id) (-(id)-1)
-#define nct_id(id) ((id)<0 ? -(id)-1 : (id))
-#define nct_iscoord(var) (((var)->id)<0)
+#define nct_varid(var) ((var)->id_var-1)
+#define nct_dimid(var) ((var)->id_dim-1)
+#define nct_varid_(loc) (loc+1)
+#define nct_dimid_(loc) (loc+1)
+#define nct_iscoord(var) ((var)->id_dim && (var)->id_var)
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
@@ -377,6 +379,24 @@ nct_var* nct_set_start(nct_var* coord, size_t offset);
    time0(var1) - time0(var0) in their time unit.
    Both must have the same time unit. */
 time_t nct_timediff(const nct_var* var1, const nct_var* var0);
+
+/*
+ * Concatenation can be tricky when data is not loaded:
+ * Here '-' describes a datum in the virtual file.
+ * concatenation:	----|------|------ // '|' is a border between real files
+ * set_length:		----|------(|------) // data in '()' is not in the virtual file anymore
+ * Concatenation of a new file:
+ * expected result:	----|------|========(|------) // '=' is data from the new file
+ * actual result:	----|------|------|==(======)
+ * This is because the concatenation list is unchanged in set_length.
+ *
+ * To avoid this error, one has to explicitely call nct_update_concatlist:
+ * concatenation:	----|------|------
+ * set_length:		----|------(|------)
+ * update:		----|------
+ * new concatenation:	----|------|========
+ */
+nct_var* nct_update_concatlist(nct_var*);
 
 /* This frees the data unless used by another variable (see nct_copy_var) or flagged as not_freeable.
  * Can be used to limit RAM usage:

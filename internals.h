@@ -90,15 +90,16 @@ static void _nct_read_dim(nct_set* set, int dimid) {
     nct_var** v = set->dims + dimid;
     ncfunk(nc_inq_dim, set->ncid, dimid, name, &len);
     if ((varid = nct_get_varid(set, name)) >= 0) {
-	(*v = set->vars[varid]) -> len = len;
+	(*v = set->vars[varid]); // linǩ to the existing var
+	(*v)->len		= len;
 	(*v)->filedimensions[0] = len;
-	(*v)->id = nct_coordid((*v)->id);
+	(*v)->id_dim		= nct_dimid_(dimid);
 	return;
     }
     *v = malloc(sizeof(nct_var));
     **v = (nct_var) {
 	.super         = set,
-	.id            = dimid,
+	.id_dim        = nct_dimid_(dimid),
 	.ncid          = dimid,
 	.name          = strdup(name),
 	.freeable_name = 1,
@@ -117,11 +118,12 @@ static nct_set* _nct_read_var_info(nct_set *set, int varid, int flags) {
     nct_var* dest = set->vars[varid] = malloc(sizeof(nct_var));
     *dest = (nct_var) {
 	.super         = set,
-	.id            = varid,
+	.id_var        = nct_varid_(varid),
 	.ncid          = varid,
 	.name          = strdup(name),
 	.freeable_name = 1,
 	.ndims         = ndims,
+	.nfiledims     = ndims,
 	.dimcapacity   = ndims+1,
 	.natts         = natts,
 	.attcapacity   = natts,
