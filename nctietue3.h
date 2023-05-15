@@ -342,9 +342,21 @@ nct_set* nct_read_ncf(const char*, int flags);
 nct_set* nct_read_ncf_gd(nct_set*, const char*, int flags);
 
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
-/* See nct__get_filenames. */
-nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* concatdim,
-	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest);
+/* See comment on nct__get_filenames. */
+nct_set* nct_read_mfnc_regex_(
+	const char*	filename,
+	int		regex_cflags,
+	char*		concatdim,
+	void (*matchfun)(
+	    const char* restrict,	// filename
+	    int,			// nmatch
+	    regmatch_t*,		// match
+	    void*			// data out
+	    ),
+	int	size1,
+	int	nmatches,
+	void**	matchdest
+	);
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
@@ -425,7 +437,7 @@ nct_var*  nct_meannan_first(nct_var*);
  *	arg3 (void*):			An array whither fun can write some data.
  * size1: 	how much space should be allocated per filename to be used in fun as arg3
  * nmatch:	how many matches (regmatch_t) from one filename.
- *		First match the whole matched expression and then capture groups i.e. \([0-9]*\).
+ *		First match is the whole matched expression and then capture groups i.e. \([0-9]*\).
  * dest (out):	pointer to the array where data was written in fun. Space is allocated into heap in this function.
  *
  * Returns:
