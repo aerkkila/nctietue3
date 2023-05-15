@@ -248,8 +248,7 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    if(dimid0 < tmpvar->ndims)
 		dimname = vs0->dims[tmpvar->dimids[dimid0]]->name;
 	}
-	/* Not a concatenation but can be useful.
-	 * Plus this check is almost never made when user doesn't knowingly call this feature. */
+	/* Not a concatenation but useful. */
 	else if(!strcmp(dimname, "-v")) {
 	    varid1=-1;
 	    nct_foreach(vs1, var1) {
@@ -259,9 +258,9 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    return vs0;
 	}
 	else
-	    dimname++; // dismiss the hyphen
+	    dimname++; // don't include the hyphen
     }
-    /* Now dimname is either existing dimension or one to be created. */
+    /* Now dimname is either an existing dimension or one to be created. */
     dimid0 = nct_get_dimid(vs0, dimname);
     if (dimid0 < 0)
 	dimid0 = nct_add_dim(vs0, 1, dimname)->id;
@@ -290,6 +289,8 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
        so that changes would not cumulate when having multiple variables. */
     nct_foreach(vs0, var0) {
 	nct_var* var1 = nct_get_var(vs1, var0->name);
+	if (nct_get_vardimid(var0, dimid0) < 0)
+	    nct_add_vardim_first(var0, dimid0);
 	if (!var1)
 	    continue;
 	if (!var0->data)

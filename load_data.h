@@ -116,7 +116,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 
 static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
     printf("Loading %zu %% (%zu / %zu); file %i: %s",
-	    (info->pos+len)*100/info->ndata, info->pos, info->ndata, info->ifile, var->super->filename);
+	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, info->ifile, var->super->filename);
     if (nct_verbose == nct_verbose_newline)
 	putchar('\n');
     else if (nct_verbose == nct_verbose_overwrite)
@@ -138,6 +138,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	info->data += len * info->size1;
 	info->pos += len;
 	info->start += len;
+	info->ifile++;
 	return 0;
     }
     /* If this wasn't the first file, we call this function again to handle
