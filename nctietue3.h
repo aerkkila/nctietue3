@@ -157,6 +157,7 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 /* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
 nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
+nct_att* nct_add_varatt(nct_var* var, nct_att* att);
 nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
@@ -170,6 +171,7 @@ int nct_create_nc(const nct_set* src, const char* name);
 /* Like nct_create_nc but writes only coordinates and not other variables. */
 int nct_createcoords_nc(const nct_set* src, const char* name);
 
+nct_att* nct_copy_att(nct_var*, const nct_att*);
 nct_var* nct_copy_var(nct_set*, nct_var*, int link);
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)

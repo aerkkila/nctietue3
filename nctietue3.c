@@ -195,18 +195,14 @@ nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name)
     return nct_add_var(set, src, dtype, name, ndims, dimids);
 }
 
-nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable) {
+nct_att* nct_add_varatt(nct_var* var, nct_att* att) {
     void* vp;
     if(var->attcapacity < var->natts+1) {
 	if(!(vp=realloc(var->atts, (var->attcapacity=var->natts+3)*sizeof(nct_att))))
 	    goto failed;
 	var->atts = vp;
     }
-    var->atts[var->natts++] = (nct_att){ .name     = name,
-					 .value    = value,
-					 .dtype    = NC_CHAR,
-					 .len      = value? strlen(value)+1: 0,
-					 .freeable = freeable };
+    var->atts[var->natts++] = *att;
     return var->atts + var->natts-1;
 failed:
     startpass;
@@ -215,6 +211,17 @@ failed:
     print_varerror(var, "    ");
     nct_return_error(NULL);
     endpass; // TODO: this is never reached which is a bug
+}
+
+nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable) {
+    nct_att att = {
+	.name     = name,
+	.value    = value,
+	.dtype    = NC_CHAR,
+	.len      = value? strlen(value)+1: 0,
+	.freeable = freeable
+    };
+    return nct_add_varatt(var, &att);
 }
 
 nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
@@ -367,6 +374,19 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
     return var;
 }
 
+nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
+    long len = src->len * nctypelen(src->dtype);
+    nct_att att = {
+	.name	= strdup(src->name),
+	.value	= malloc(len),
+	.dtype	= src->dtype,
+	.len	= src->len,
+	.freeable = 3,
+    };
+    memcpy(att.value, src->value, len);
+    return nct_add_varatt(var, &att);
+}
+
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     nct_var* var;
     if (nct_iscoord(src)) {
@@ -402,6 +422,9 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
 	var->freeable_name = 1;
     }
+
+    for(int a=0; a<src->natts; a++)
+	nct_copy_att(var, src->atts+a);
 
     if (link)
 	nct_link_data(var, src);
