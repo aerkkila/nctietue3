@@ -570,17 +570,15 @@ next:;
 
 size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
-    long long sem[] = {0, var->len, (var->len)/2}; // start, end, mid
+    long long sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
     while (1) {
 	if (sem[1]-sem[0] <= 1) {
 	    double v0 = getfun(var, sem[0]),
 		   v1 = getfun(var, sem[1]);
-	    return value<v0 ? sem[0]-1 : value<v1 ? sem[1]-1 : value>v1 ? sem[1]+1 : sem[1]+!!right;
+	    return value<v0 ? sem[0] : value<v1 ? sem[1] : value>v1 ? sem[1]+1 : sem[1]+!!right;
 	}
 	double try = getfun(var, sem[2]);
-	if (try == value)
-	    return sem[2]+!!right;
-	sem[try>value] = sem[2]+1-2*(try>value); // if (try>value) end = mid-1; else start = mid+1;
+	sem[try>value] = sem[2]; // if (try>value) end = mid; else start = mid+1;
 	sem[2] = (sem[0]+sem[1]) / 2;
     }
 }
