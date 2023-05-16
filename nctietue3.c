@@ -389,14 +389,14 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	    if (dimids[i] < 0) {
 	    	nct_var* dim = nct_add_dim(dest, vardim->len, strdup(vardim->name));
 		dim->freeable_name = 1;
-		dimids[i] = dim->id_dim;
+		dimids[i] = nct_dimid(dim);
 	    }
 	    /* Create a new dimension if lengths mismatch in source and destination. */
 	    else if (dest->dims[dimids[i]]->len != vardim->len) {
 		nct_var* dim = nct_add_dim(dest, vardim->len, strdup(vardim->name));
 		dim->freeable_name = 1;
 		nct_ensure_unique_name(dim);
-		dimids[i] = dim->id_dim;
+		dimids[i] = nct_dimid(dim);
 	    }
 	}
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
