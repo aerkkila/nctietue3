@@ -183,6 +183,11 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     if (nct_iscoord(var))
 	return load_coordinate_var(var);
     nct_allocate_varmem(var);
+    nc_type type_finally = var->dtype;
+    if (var->dtype == NC_CHAR) {
+	var->dtype = NC_NAT;
+	type_finally = NC_CHAR;
+    }
     loadinfo_t info = {
 	.size1	= nctypelen(var->dtype),
 	.fstart	= fstart,
@@ -196,6 +201,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 	nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, var->len);
     if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K"), fflush(stdout);
+    var->dtype = type_finally;
     return var;
 }
 
