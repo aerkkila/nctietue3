@@ -438,6 +438,7 @@ double    nct_min_floating(const nct_var*);
 long long nct_min_integer(const nct_var*);
 nct_anyd  nct_min_anyd(const nct_var*);				// returns (nct_anyd){.d=argmin, .type=min}
 void*     nct_minmax(const nct_var*, void* result);		// returns result which has to be initialized
+void*	  nct_minmax_nan(const nct_var* var, long nanval, void* vresult);
 nct_var*  nct_mean_first(nct_var*);
 nct_var*  nct_meannan_first(nct_var*);
 

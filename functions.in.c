@@ -138,6 +138,39 @@ void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
     return result;
 }
 
+void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult) {
+#if CHECK_INVALID
+    if (!(var->len))
+	nct_return_error(NULL);
+#endif
+    ctype maxval, minval, *result=vresult, nanval=nanval_long;
+#if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
+#define _my_isnan(a) (!((a) == (a)) || (a) == nanval)
+#else
+#define _my_isnan(a) ((a) == nanval)
+#endif
+    int i=0;
+    int len = var->len;
+    for (; i<len && _my_isnan(((ctype*)var->data)[i]); i++);
+    if (i == len) {
+	result[0] = result[1] = nanval;
+	return result;
+    }
+    maxval = minval = ((ctype*)var->data)[i];
+    for(; i<len; i++) {
+	if (_my_isnan(((ctype*)var->data)[i]))
+	    continue;
+	if(maxval < ((ctype*)var->data)[i])
+	    maxval = ((ctype*)var->data)[i];
+	else if(minval > ((ctype*)var->data)[i])
+	    minval = ((ctype*)var->data)[i];
+    }
+    result[0] = minval;
+    result[1] = maxval;
+    return result;
+#undef _my_isnan
+}
+
 nct_var* nct_mean_first_@nctype(nct_var* var) {
     size_t zerolen = var->super->dims[var->dimids[0]]->len;
     size_t new_len = var->len / zerolen;

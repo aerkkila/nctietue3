@@ -19,6 +19,7 @@ double    nct_min_floating_@nctype(const nct_var*);
 long long nct_min_integer_@nctype(const nct_var*);
 nct_anyd  nct_min_anyd_@nctype(const nct_var*);
 void*     nct_minmax_@nctype(const nct_var*, void*);
+void*     nct_minmax_nan_@nctype(const nct_var*, long, void*);
 nct_var*  nct_mean_first_@nctype(nct_var*);
 nct_var*  nct_meannan_first_@nctype(nct_var*);
 ';
