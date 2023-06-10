@@ -972,45 +972,6 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     return result;
 }
 
-#if 0
-/* This section isn't functional yet. */
-typedef struct {
-    size_t pos_in_file, usable_right, usable_left, cache_size, next_move;
-    char perc_left;
-    nct_var* var; // var->data is pointer to current location in cache
-    void* cache;  // this points to start of allocated memory
-} _cookie_t;
-
-static size_t _cookie_read(_cookie_t* cookie, void* _, size_t nbytes) {
-    size_t old = cookie->next_move;
-    cookie->next_move = nbytes;
-    usable_right -= old;
-    usable_left  += old;
-    if (usable_right >= 0) {
-	cookie->var->data += old;
-	return nbytes; }
-    if (nbytes > cookie->cache_size) {
-	void* try = realloc(cookie->var, nbytes);
-	if (!try) {
-	    nct_puterror("cannot allocate %zu bytes of memory\n", nbytes);
-	    return -1; }
-	cookie->cache = try;
-	cookie->cache_size = nbytes;
-	cookie->var->data = try + cookie->usable_left;
-    }
-    // TODO: lataa
-}
-
-FILE* nct_open_stream(nct_var* var, size_t cache_size) {
-    if (var->super->ncid <= 0)
-	return NULL;
-    _cookie_t* cookie = calloc(1, sizeof(cookie_t));
-    cookie->var = var;
-    cookie->cache_size = cache_size;
-    cookie->perc_left = 10;
-}
-#endif
-
 void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
