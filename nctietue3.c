@@ -235,6 +235,11 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
     return var;
 }
 
+void nct_close_nc(nct_set* set) {
+    ncfunk(nc_close, set->ncid);
+    set->ncid = 0;
+}
+
 /* Concatenation is not yet supported along other existing dimensions than the first one.
    Coordinates will be loaded if aren't already.
    Variable will not be loaded, except if the first is loaded and the second is not.
@@ -891,10 +896,8 @@ void nct_allocate_varmem(nct_var* var) {
 }
 
 static void perhaps_close_the_file(nct_set* set) {
-    if (set->ncid > 0 && !(nct_readflags & nct_rkeep)) {
-	ncfunk(nc_close, set->ncid);
-	set->ncid = 0;
-    }
+    if (set->ncid > 0 && !(nct_readflags & nct_rkeep))
+	nct_close_nc(set);
 }
 
 static void perhaps_open_the_file(nct_var* var) {
@@ -1319,8 +1322,8 @@ void nct_unlink_data(nct_var* var) {
     var->capacity = 0;
 }
 
-enum {_createwhole, _createcoords};
-static int _nct_create_nc(const nct_set* src, const char* name, int what) {
+enum {_createcoords=1<<0, _defonly=1<<1, _mutable=1<<2};
+static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
     int ncid, id;
     startpass;
 
@@ -1332,36 +1335,42 @@ static int _nct_create_nc(const nct_set* src, const char* name, int what) {
     n = src->nvars;
     for(int i=0; i<n; i++) {
 	nct_var* v = src->vars[i];
-	if (what==_createcoords && !nct_iscoord(v))
+	if (what & _createcoords && !nct_iscoord(v))
 	    continue;
-	int unlink = 0;
-	if(!v->data) {
-	    if(v->super->ncid > 0 || v->super->filename) {
-		nct_load(v);
-		unlink = 1;
-	    }
-	    else continue;
+	int load = 0;
+	if (!v->data) {
+	    if (v->super->ncid > 0 || v->super->filename)
+		load = 1;
+	    else
+		continue;
 	}
 	ncfunk(nc_def_var, ncid, v->name, v->dtype, v->ndims, v->dimids, &id);
-	ncfunk(nc_put_var, ncid, id, v->data);
+	if (what & _mutable)
+	    v->ncid = id;
 	for(int a=0; a<v->natts; a++)
 	    ncfunk(nc_put_att_text, ncid, i, v->atts[a].name,
 		   v->atts[a].len, v->atts[a].value);
-	if(unlink)
-	    nct_unlink_data(v);
+	if (what & _defonly)
+	    continue;
+	if (load) nct_load(v);
+	ncfunk(nc_put_var, ncid, id, v->data);
+	if (load) nct_unlink_data(v);
     }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+    if (what & _mutable)
+	/* an unsafe hack to discard the const qualifier */
+	memcpy(&src->ncid, &ncid, sizeof(src->ncid));
+#pragma GCC diagnostic pop
     endpass;
     return ncid;
 }
-
-int nct_create_nc(const nct_set* src, const char* name) {
-    return _nct_create_nc(src, name, _createwhole);
-}
-
-int nct_createcoords_nc(const nct_set* src, const char* name) {
-    return _nct_create_nc(src, name, _createcoords);
-}
-
+int nct_create_nc(const nct_set* src, const char* name)		{ return _nct_create_nc(src, name, 0); }
+int nct_create_nc_mut(nct_set* src, const char* name)		{ return _nct_create_nc(src, name, _mutable); }
+int nct_create_nc_def(nct_set* src, const char* name)		{ return _nct_create_nc(src, name, _mutable|_defonly); }
+int nct_createcoords_nc(const nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords); }
+int nct_createcoords_nc_mut(nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords|_mutable); }
+int nct_createcoords_nc_def(nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords|_mutable|_defonly); }
 void nct_write_nc(const nct_set* src, const char* name) {
     startpass;
     ncfunk(nc_close, nct_create_nc(src, name));

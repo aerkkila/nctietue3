@@ -161,15 +161,29 @@ nct_att* nct_add_varatt(nct_var* var, nct_att* att);
 nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
+void nct_close_nc(nct_set*); // calls nc_close(set->ncid)
+
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
 
 /* see nct_mktime0 */
 nct_var* nct_convert_timeunits(nct_var* var, const char* units);
 
-/* Like nct_write_nc but returns ncid without closing it. */
+/* Like nct_write_nc but returns ncid without closing it.
+   src->ncid and all src->var->ncid are unchanged
+   because they may be used for reading from an existing file. */
 int nct_create_nc(const nct_set* src, const char* name);
 /* Like nct_create_nc but writes only coordinates and not other variables. */
 int nct_createcoords_nc(const nct_set* src, const char* name);
+
+/* Like the two functions above but src->ncid and all src->var->ncid are given the ids in the new file.
+   Safe to use when creating a new file from scratch. */
+int nct_create_nc_mut(nct_set* src, const char* name);
+int nct_createcoords_nc_mut(nct_set* src, const char* name);
+
+/* Like nct_create_mut but nc_put_var must be called manually afterwards for all variables and coordinates.
+   These make it easier to use those netcdf-functions which must be called before writing the data. */
+int nct_create_nc_def(nct_set* src, const char* name);
+int nct_createcoords_nc_def(nct_set* src, const char* name);
 
 nct_att* nct_copy_att(nct_var*, const nct_att*);
 nct_var* nct_copy_var(nct_set*, nct_var*, int link);
@@ -311,7 +325,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  * nct_rkeep:
  *	Read files are kept open. This can lead to Netcdf error: too many open files,
  *	but avoids reopening them on nct_load if nct_rlazy or nct_rcoord is used.
- *	nct_free will close the file
+ *	nct_free or nct_close_nc will close the file
  * default:
  *	Files are closed after reading the metadata and reopened on nct_load.
  */
