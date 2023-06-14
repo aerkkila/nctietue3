@@ -667,6 +667,7 @@ static void nct_free_var(nct_var* var) {
 	free(var->name);
     if hasrule(var, nct_r_concat)
 	free(var->rule[nct_r_concat].arg.v);
+    free(var->stack);
 }
 
 void _nct_free(int _, ...) {
@@ -973,6 +974,26 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     nct_stderr = stderr0;
     //nct_error_action = act0;
     return result;
+}
+
+static const int stack_size1 = 8;
+
+int nct_stack_not_empty(const nct_var* var) {
+    return !!var->stackbytes;
+}
+
+long long nct_pop_integer(nct_var* var) {
+    long long ret;
+    memcpy(&ret, var->stack + var->stackbytes - stack_size1, stack_size1);
+    var->stackbytes -= stack_size1;
+    return ret;
+}
+
+void nct_push_integer(nct_var* var, long long integ) {
+    if (var->stackbytes + stack_size1 >= var->stackcapasit)
+	var->stack = realloc(var->stack, var->stackcapasit += 8*stack_size1);
+    memcpy(var->stack + var->stackbytes, &integ, stack_size1);
+    var->stackbytes += stack_size1;
 }
 
 void nct_print_var(const nct_var* var, const char* indent) {

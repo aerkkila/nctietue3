@@ -105,24 +105,26 @@ struct nct_att {
 
 #define nct_maxdims 5
 struct nct_var {
-    nct_set* super;
-    int      id_dim,	// location of this in set->dims + 1, if exists there
-	     id_var,	// location of this in set->vars + 1, if exists there
-	     ncid;	// ncid of the variable if this is a coordinate (both dim and var)
-    char*    name;
-    char     freeable_name;
-    int      ndims, nfiledims, dimcapacity;
-    int*     dimids; // dimensions in the virtual file which may consist of multiple real files
-    int      natts, attcapacity;
-    nct_att* atts;
-    size_t   len, capacity;
-    long     filedimensions[nct_maxdims]; // how much to read at maximum from the real file
-    nc_type  dtype;
-    int      not_freeable;
-    unsigned char* nusers; // the first user is not counted
-    void*    data;
-    unsigned  rules; // a bitmask of rules which are in use
-    nct_rule rule[nct_r_nrules];
+    nct_set*	super;
+    int		id_dim,	// location of this in set->dims + 1, if exists there
+		id_var,	// location of this in set->vars + 1, if exists there
+		ncid;	// ncid of the variable if this is a coordinate (both dim and var)
+    char*	name;
+    char	freeable_name;
+    int		ndims, nfiledims, dimcapacity;
+    int*	dimids; // dimensions in the virtual file which may consist of multiple real files
+    int		natts, attcapacity;
+    nct_att*	atts;
+    size_t	len, capacity;
+    long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
+    nc_type	dtype;
+    int		not_freeable;
+    unsigned	char* nusers; // the first user is not counted
+    void*	data;
+    unsigned	rules; // a bitmask of rules which are in use
+    nct_rule	rule[nct_r_nrules];
+    int		stackbytes, stackcapasit;
+    void*	stack;
 };
 
 struct nct_set {
@@ -289,6 +291,44 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t i
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
 #define nct_mktime0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
 nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is not an error in this function.
+
+/*
+ * Consider this loop which is meant to process the data 10 frames at the time and then skip 10 frames:
+ *	nct_var* timevar = nct_get_vardim(var, 0).
+ * 	for (int t=0; t<100; t+=20) {
+ * 		nct_set_start(timevar, t);
+ * 		nct_set_length(timevar 10); // must be called on each loop
+ * 		nct_load(var);
+ * 		do_stuff(var);
+ * 	}
+ *
+ * If this should use the values in the time coordinate instead of indices, one may write:
+ * 	for (int t=0; t<100; t+=20) {
+ *		nct_set_start(timevar, 0);
+ *		nct_set_start(timevar, nct_find_sorted(timevar, t)); // broken
+ * 		nct_set_length(timevar 10);
+ * 		nct_load(var);
+ * 		do_stuff(var);
+ * 	}
+ *
+ * The code above is broken because the length is set to 10 so anything beyond 10 is not found by nct_find_sorted.
+ * There may be easier ways around this in this simple example
+ * but in a more complex program one may want to push and pop the real length of timevar:
+ * 	for (int t=0; t<100; t+=20) {
+ *		nct_set_start(timevar, 0);
+ *		if (stack_not_empty(timevar))
+ *			nct_set_length(timevar, nct_pop_integer(timevar));
+ *		nct_push_integer(timevar, timevar->len);
+ *		int ind = nct_find_sorted(timevar, t);
+ *		nct_set_start(timevar, nct_find_sorted(timevar, t));
+ * 		nct_set_length(timevar 10);
+ * 		nct_load(var);
+ * 		do_stuff(var);
+ * 	}
+ */
+int		nct_stack_not_empty(const nct_var*);
+long long	nct_pop_integer(nct_var*);
+void		nct_push_integer(nct_var*, long long);
 
 void nct_print_var(const nct_var*, const char* indent);
 void nct_print_dim(const nct_var*, const char* indent);
