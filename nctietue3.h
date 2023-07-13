@@ -319,7 +319,6 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is no
  *		if (stack_not_empty(timevar))
  *			nct_set_length(timevar, nct_pop_integer(timevar));
  *		nct_push_integer(timevar, timevar->len);
- *		int ind = nct_find_sorted(timevar, t);
  *		nct_set_start(timevar, nct_find_sorted(timevar, t));
  * 		nct_set_length(timevar 10);
  * 		nct_load(var);
