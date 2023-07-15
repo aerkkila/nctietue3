@@ -87,7 +87,7 @@ union nct_any {
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-    nct_r_start, nct_r_concat, nct_r_list, nct_r_nrules,
+    nct_r_start, nct_r_concat, nct_r_list, nct_r_stream, nct_r_nrules,
 } nct_rule_e;
 typedef struct {
     nct_any arg;
@@ -238,20 +238,21 @@ nct_var* nct_lastvar(const nct_set*);
 void _nct_free(int _, ...); // first argument is meaningless
 void nct_free1(nct_set*);
 
-void nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // coordinates of the index
-nct_att* nct_get_varatt(const nct_var* var, const char* name);
-char* nct_get_varatt_text(const nct_var*, const char*);
-nct_var* nct_get_dim(const nct_set* set, const char* name);
-nct_var* nct_get_var(const nct_set* set, const char* name);
-nct_var* nct_get_vardim(const nct_var* var, int num);
-int nct_get_vardimid(const nct_var* restrict var, int dimid);
-int nct_get_varid(const nct_set* restrict, const char* restrict);
-int nct_get_dimid(const nct_set* restrict, const char* restrict);
-size_t nct_get_len_from(const nct_var*, int startdim);
-double nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
-double nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
-double    nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
-long long nct_getl_integer(const nct_var*, size_t);  // If the value has to be loaded.
+void		nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // coordinates of the index
+nct_att*	nct_get_varatt(const nct_var* var, const char* name);
+char*		nct_get_varatt_text(const nct_var*, const char*);
+nct_var*	nct_get_dim(const nct_set* set, const char* name);
+nct_var*	nct_get_var(const nct_set* set, const char* name);
+nct_var*	nct_get_vardim(const nct_var* var, int num);
+int		nct_get_vardimid(const nct_var* restrict var, int dimid);
+int		nct_get_varid(const nct_set* restrict, const char* restrict);
+int		nct_get_dimid(const nct_set* restrict, const char* restrict);
+size_t		nct_get_len_from(const nct_var*, int startdim);
+FILE*		nct_get_stream(const nct_var*);
+double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
+double		nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
+double		nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
+long long	nct_getl_integer(const nct_var*, size_t);  // If the value has to be loaded.
 
 /* Reads attribute "units" from $var
    and fills timetm according to that
@@ -272,6 +273,10 @@ int nct_link_data(nct_var*, nct_var*);
 #define nct_loadg(set, name) nct_load_as(nct_get_var(set, name), NC_NAT)
 #define nct_loadg_as(set, name, type) nct_load_as(nct_get_var(set, name), type)
 nct_var* nct_load_as(nct_var*, nc_type);
+
+/* For special cases when the variable has a FILE pointer from which the data comes from.
+   If that is the case, you probably know it. */
+nct_var* nct_load_stream(nct_var*, size_t);
 
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 

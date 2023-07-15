@@ -130,6 +130,10 @@ void* nct_getfun_1[] = {
 };
 
 #include "internals.h"
+#ifdef HAVE_PROJ
+#include "extra/nctproj.h"
+#include "extra/nctproj.c"
+#endif
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name) {
     if (set->dimcapacity < set->ndims+1) {
@@ -667,6 +671,8 @@ static void nct_free_var(nct_var* var) {
 	free(var->name);
     if hasrule(var, nct_r_concat)
 	free(var->rule[nct_r_concat].arg.v);
+    if hasrule(var, nct_r_stream)
+	fclose(nct_get_stream(var));
     free(var->stack);
 }
 
@@ -907,6 +913,22 @@ static void perhaps_open_the_file(nct_var* var) {
 }
 
 #include "load_data.h" // nct_load_as
+
+FILE* nct_get_stream(const nct_var* var) {
+    return hasrule(var, nct_r_stream) ? var->rule[nct_r_stream].arg.v : NULL;
+}
+
+nct_var* nct_load_stream(nct_var* var, size_t len) {
+    int len0 = var->len;
+    var->len = len;
+    nct_allocate_varmem(var);
+    var->len = len0;
+    FILE* f = nct_get_stream(var);
+    size_t ret = fread(var->data, nctypelen(var->dtype), len, f);
+    if (ret != len)
+	nct_puterror("fread %zu returned %zu in nct_load_stream\n", len, ret);
+    return var;
+}
 
 /* In nct_localtime, the argument (nct_anyd)time0 should be the return value from nct_mktime0.
    The right static function (nct_localtime_$timestep) is called based on that. */
