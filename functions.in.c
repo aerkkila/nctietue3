@@ -59,6 +59,14 @@ long long nct_get_integer_last_@nctype(const nct_var* var, size_t ind) {
     return (long long)((ctype*)var->data)[var->len-ind];
 }
 
+double nct_getatt_floating_@nctype(const nct_att* att, size_t ind) {
+    return ((ctype*)att->value)[ind];
+}
+
+long long nct_getatt_integer_@nctype(const nct_att* att, size_t ind) {
+    return ((ctype*)att->value)[ind];
+}
+
 nct_anyd nct_max_anyd_@nctype(const nct_var* var) {
 #if CHECK_INVALID
     if(!(var->len))

@@ -12,6 +12,8 @@ double    nct_get_floating_@nctype(const nct_var*, size_t);
 long long nct_get_integer_@nctype(const nct_var*, size_t);
 double    nct_get_floating_last_@nctype(const nct_var*, size_t);
 long long nct_get_integer_last_@nctype(const nct_var*, size_t);
+double    nct_getatt_floating_@nctype(const nct_att*, size_t);
+long long nct_getatt_integer_@nctype(const nct_att*, size_t);
 double    nct_max_floating_@nctype(const nct_var*);
 long long nct_max_integer_@nctype(const nct_var*);
 nct_anyd  nct_max_anyd_@nctype(const nct_var*);
