@@ -1391,8 +1391,12 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 	if (what & _mutable)
 	    v->ncid = id;
 	for(int a=0; a<v->natts; a++)
-	    ncfunk(nc_put_att_text, ncid, i, v->atts[a].name,
-		   v->atts[a].len, v->atts[a].value);
+	    if (v->atts[a].dtype == NC_CHAR)
+		ncfunk(nc_put_att_text, ncid, i, v->atts[a].name,
+			v->atts[a].len, v->atts[a].value);
+	    else
+		ncfunk(nc_put_att, ncid, i, v->atts[a].name, v->atts[a].dtype,
+			v->atts[a].len, v->atts[a].value);
 	if (what & _defonly)
 	    continue;
 	if (load) nct_load(v);
