@@ -24,6 +24,16 @@ static nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int 
     return v0;
 }
 
+/* Calling this alone does not free any memory. */
+static void _nct_drop_var(nct_var* var) {
+    nct_set* super = var->super;
+    for(int i=nct_varid(var)+1; i<super->nvars; i++) {
+	super->vars[i-1] = super->vars[i];
+	super->vars[i-1]->id_var--;
+    }
+    super->nvars--;
+}
+
 /* The dimension must be already expanded. */
 static nct_var* _nct_expand_var(nct_var* var, int vardim, int howmuch, int start0_end1, nct_any fill) {
     size_t vlen0, vlen1, dlen0, dlen1, block0, block1, fillsize, nblocks;

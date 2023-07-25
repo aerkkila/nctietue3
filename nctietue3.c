@@ -79,7 +79,8 @@ const char* nct_dimname_color = "\033[44;92m";
 const char* nct_type_color    = "\033[93m";
 const char* nct_default_color = "\033[0m";
 
-static void     nct_free_var(nct_var* var);
+static void     _nct_free_var(nct_var*);
+static void	_nct_free_att(nct_att*);
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int flags);
 static nct_set* nct_read_ncf_lazy(const char* filename, int flags);
 static nct_set* nct_after_lazyread(nct_set* s, int flags);
@@ -515,6 +516,20 @@ failed:
     nct_return_error(NULL);
 }
 
+nct_var* nct_coord2dim(nct_var* var) {
+    var->ncid = -1;
+    var->id_var = 0;
+    var->dimids = (free(var->dimids), NULL);
+    for(int i=var->natts-1; i>=0; i--)
+	_nct_free_att(var->atts+i);
+    var->atts = (free(var->atts), NULL);
+    var->attcapacity = 0;
+    nct_unlink_data(var);
+    var->dtype = NC_NAT;
+    _nct_drop_var(var);
+    return var;
+}
+
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
     size_t new_len = var->len / var->super->dims[var->dimids[dim]]->len;
     if (shrink && !cannot_free(var)) {
@@ -657,7 +672,7 @@ static void _nct_free_att(nct_att* att) {
     att->freeable = 0;
 }
 
-static void nct_free_var(nct_var* var) {
+static void _nct_free_var(nct_var* var) {
     free(var->dimids);
     for(int i=0; i<var->natts; i++)
 	_nct_free_att(var->atts+i);
@@ -696,13 +711,13 @@ void nct_free1(nct_set* set) {
     for(int i=0; i<n; i++) {
 	if (nct_iscoord(set->vars[i]))
 	    continue;
-	nct_free_var(set->vars[i]);
+	_nct_free_var(set->vars[i]);
 	memset(set->vars[i], 0, sizeof(nct_var));
 	free(set->vars[i]);
     }
     n = set->ndims;
     for(int i=0; i<n; i++) {
-	nct_free_var(set->dims[i]);
+	_nct_free_var(set->dims[i]);
 	memset(set->dims[i], 0, sizeof(nct_var));
 	free(set->dims[i]);
     }
@@ -1284,6 +1299,16 @@ nct_var* nct_rewind(nct_var* var) {
     if (var->data)
 	var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
     return var;
+}
+
+void nct_rm_var(nct_var* var) {
+    if (nct_iscoord(var)) {
+	nct_coord2dim(var);
+	return;
+    }
+    _nct_drop_var(var);
+    _nct_free_var(var);
+    free(var);
 }
 
 /* This uses static functions from load_data.h */

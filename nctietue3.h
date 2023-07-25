@@ -155,7 +155,7 @@ struct nct_anyd {
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
-		     int ndims, int* dimids);
+		     int ndims, int* dimids); // undo with nct_rm_var
 /* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
 nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
@@ -196,6 +196,7 @@ nct_set* _nct_create_simple(void* dt, int dtype, ...);
 nct_set* _nct_create_simple_gd(nct_set* s, void* dt, int dtype, ...);
 
 nct_var* nct_dim2coord(nct_var*, void*, nc_type);
+nct_var* nct_coord2dim(nct_var* var); // The variable is removed and the dimension kept.
 
 /* Nothing is calculated nor data moved.
    The dimension is just simply dropped.
@@ -428,6 +429,8 @@ nct_set* nct_read_mfnc_ptrptr(char** filenames, int n, char* concatdim);
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
 nct_var* nct_rewind(nct_var* var); // back to start if nct_set_start has moved data pointer away from start
+
+void nct_rm_var(nct_var* var);
 
 /* Should be used before loading the variables.
  * The coordinate can be loaded before these functions.
