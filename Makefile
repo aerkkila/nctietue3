@@ -3,15 +3,15 @@ include config.mk
 libraries = -lnetcdf
 
 ifdef have_proj
-macros += -DHAVE_PROJ -D_GNU_SOURCE
-libraries += -lproj -lm
-extra_headers += extra/nctproj.h
-extra_dependencies += extra/nctproj.[ch]
+	macros += -DHAVE_PROJ -D_GNU_SOURCE
+	libraries += -lproj -lm
+	extra_headers += extra/nctproj.h
+	extra_dependencies += extra/nctproj.[ch]
 endif
 
 all: libnctietue3.so
 
-nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h config.mk $(extra_dependencies)
+nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h transpose.c config.mk $(extra_dependencies)
 	$(CC) $(CFLAGS) $(macros) -o $@ -c $<
 
 functions.o: functions.c function_wrappers.c config.mk nctietue3.h

@@ -443,6 +443,13 @@ nct_var* nct_set_start(nct_var* coord, size_t offset);
    Both must have the same time unit. */
 time_t nct_timediff(const nct_var* var1, const nct_var* var0);
 
+/* Write the data into new order.
+   User must give the same dimensions as is in the variable but reordered. */
+nct_var* nct_transpose_order_ptr(nct_var* var, const int* order);
+nct_var* nct_transpose_names_ptr(nct_var* var, const char* const* names);
+nct_var* nct_transpose_order(nct_var* var, ...);
+nct_var* nct_transpose_names(nct_var* var, ...);
+
 /*
  * Concatenation can be tricky when data is not loaded:
  * Here '-' describes a datum in the virtual file.

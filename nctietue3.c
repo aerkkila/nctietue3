@@ -136,6 +136,8 @@ void* nct_getfun_1[] = {
 #include "extra/nctproj.c"
 #endif
 
+#include "transpose.c"
+
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name) {
     if (set->dimcapacity < set->ndims+1) {
 	void* vp;
