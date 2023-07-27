@@ -7,6 +7,16 @@
 
 void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
 
+static void nct_print_datum_@nctype(const void* vdatum) {
+    ctype datum = *(ctype*)vdatum;
+#if __nctype__ == NC_FLOAT || __nctype__ == NC_DOUBLE
+    if (datum < 1e-5 || datum >= 1e7) {
+	printf("%e", datum);
+	return; }
+#endif
+    printf("%@form", datum);
+}
+
 static void nct_print_data__@nctype(void* arr, int i, int end) {
     for(; i<end; i++)
 	printf("%@form, ", ((@ctype*)arr)[i]);

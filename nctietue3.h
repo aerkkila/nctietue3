@@ -335,6 +335,8 @@ int		nct_stack_not_empty(const nct_var*);
 long long	nct_pop_integer(nct_var*);
 void		nct_push_integer(nct_var*, long long);
 
+void nct_print_datum(nc_type, const void*);
+void nct_print_att(const nct_att*, const char* indent);
 void nct_print_var(const nct_var*, const char* indent);
 void nct_print_dim(const nct_var*, const char* indent);
 void nct_print(const nct_set*);

@@ -77,6 +77,7 @@ const char* nct_varset_color  = "\033[1;35m";
 const char* nct_varname_color = "\033[92m";
 const char* nct_dimname_color = "\033[44;92m";
 const char* nct_type_color    = "\033[93m";
+const char* nct_att_color     = "\033[3;38;5;159m";
 const char* nct_default_color = "\033[0m";
 
 static void     _nct_free_var(nct_var*);
@@ -1035,6 +1036,22 @@ void nct_push_integer(nct_var* var, long long integ) {
     var->stackbytes += stack_size1;
 }
 
+void nct_print_att(const nct_att* att, const char* indent) {
+    printf("%s%s%s:\t ", indent, nct_att_color, att->name);
+    if (att->dtype == NC_CHAR) {
+	printf("%s%s\n", (char*)att->value, nct_default_color);
+	return;
+    }
+    int size1 = nctypelen(att->dtype);
+    for(int i=0; i<att->len-1; i++) {
+	nct_print_datum(att->dtype, att->value+i*size1);
+	printf(", ");
+    }
+    if (att->len)
+	nct_print_datum(att->dtype, att->value+(att->len-1)*size1);
+    printf("%s\n", nct_default_color);
+}
+
 void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
@@ -1048,6 +1065,11 @@ void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s  [", indent);
     nct_print_data(var);
     puts("]");
+    char inde[strlen(indent)+4];
+    strcpy(inde, indent);
+    strcat(inde, "   ");
+    for(int i=0; i<var->natts; i++)
+	nct_print_att(var->atts + i, inde);
 }
 
 void nct_print_dim(const nct_var* var, const char* indent) {
@@ -1064,10 +1086,14 @@ void nct_print_dim(const nct_var* var, const char* indent) {
 void nct_print(const nct_set* set) {
     printf("%s%i variables, %i dimensions%s\n", nct_varset_color, set->nvars, set->ndims, nct_default_color);
     int n = set->ndims;
-    for(int i=0; i<n; i++)
+    for(int i=0; i<n; i++) {
+	putchar('\n');
 	nct_print_dim(set->dims[i], "  ");
-    nct_foreach(set, var)
+    }
+    nct_foreach(set, var) {
+	putchar('\n');
 	nct_print_var(var, "  ");
+    }
 }
 
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {
