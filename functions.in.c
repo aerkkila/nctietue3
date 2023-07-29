@@ -10,16 +10,24 @@ void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
 static void nct_print_datum_@nctype(const void* vdatum) {
     ctype datum = *(ctype*)vdatum;
 #if __nctype__ == NC_FLOAT || __nctype__ == NC_DOUBLE
-    if (datum < 1e-5 || datum >= 1e7) {
-	printf("%e", datum);
-	return; }
+    if (datum > 0) {
+	if (datum < 1e-5 || datum >= 1e7) {
+	    printf("%e", datum);
+	    return; }
+    }
+    else if (datum < 0 && (datum > -1e-5 || datum <= -1e7)) {
+	    printf("%e", datum);
+	    return; }
 #endif
     printf("%@form", datum);
 }
 
-static void nct_print_data__@nctype(void* arr, int i, int end) {
-    for(; i<end; i++)
-	printf("%@form, ", ((@ctype*)arr)[i]);
+void _printhelper_@nctype(ctype* data, size_t i, size_t len) {
+    for(; i<len-1; i++) {
+	nct_print_datum_@nctype(data+i);
+	printf(", ");
+    }
+    nct_print_datum_@nctype(data+len-1);
 }
 
 void nct_print_data_@nctype(const nct_var* var) {
@@ -28,11 +36,11 @@ void nct_print_data_@nctype(const nct_var* var) {
 	return;
     size_t len = var->len;
     if (len <= 17) {
-	nct_print_data__@nctype(var->data, 0, len);
+	_printhelper_@nctype(var->data, 0, len);
 	return; }
-    nct_print_data__@nctype(var->data, 0, 8);
+    _printhelper_@nctype(var->data, 0, 8);
     printf(" ..., ");
-    nct_print_data__@nctype(var->data, len-8, len);
+    _printhelper_@nctype(var->data, len-8, len);
 }
 
 ctype* nct_range_@nctype(ctype i0, ctype i1, ctype gap) {
