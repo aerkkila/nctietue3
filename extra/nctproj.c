@@ -213,6 +213,7 @@ int seek_converted(void* vc, __off64_t* pos, int seek) {
 int close_converted(void* vc) {
     nctproj_cookie* c = vc;
     c->whence = (free(c->whence), NULL);
+    free(c);
     return 0;
 }
 
