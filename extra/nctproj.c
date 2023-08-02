@@ -72,6 +72,16 @@ static int* mkconversion(const nct_var* var, const char* from, const char* to, n
     proj_destroy(pj);
 
     /* The new coordinate spacing is defined such that the total frame size stays approximately the same. */
+    for(int i=0; i<2; i++) {
+	if (args->new_xlim[i] && !isnormal(args->new_xlim[i])) {
+	    nct_puterror("%s xlimit is %lf\n", i? "lower": "higher", args->new_xlim[i]);
+	    return NULL;
+	}
+	if (args->new_ylim[i] && !isnormal(args->new_ylim[i])) {
+	    nct_puterror("%s xlimit is %lf\n", i? "lower": "higher", args->new_xlim[i]);
+	    return NULL;
+	}
+    }
     double new_x_per_y = (args->new_xlim[1] - args->new_xlim[0]) / (args->new_ylim[1] - args->new_ylim[0]);
     if (new_x_per_y < 0)
 	new_x_per_y = -new_x_per_y;
