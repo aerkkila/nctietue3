@@ -1052,6 +1052,15 @@ void nct_print_att(const nct_att* att, const char* indent) {
     printf("%s\n", nct_default_color);
 }
 
+/* Global but hidden function. */
+void nct_print_atts(const nct_var* var, const char* indent0, const char* indent1) {
+    char inde[strlen(indent0) + strlen(indent1)];
+    strcpy(inde, indent0);
+    strcat(inde, indent1);
+    for(int i=0; i<var->natts; i++)
+	nct_print_att(var->atts + i, inde);
+}
+
 void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
@@ -1065,11 +1074,7 @@ void nct_print_var(const nct_var* var, const char* indent) {
     printf("%s  [", indent);
     nct_print_data(var);
     puts("]");
-    char inde[strlen(indent)+4];
-    strcpy(inde, indent);
-    strcat(inde, "   ");
-    for(int i=0; i<var->natts; i++)
-	nct_print_att(var->atts + i, inde);
+    nct_print_atts(var, indent, "  ");
 }
 
 void nct_print_dim(const nct_var* var, const char* indent) {
@@ -1081,6 +1086,7 @@ void nct_print_dim(const nct_var* var, const char* indent) {
 	nct_print_data(var);
 	puts("]");
     }
+    nct_print_atts(var, indent, "  ");
 }
 
 void nct_print(const nct_set* set) {
