@@ -1389,6 +1389,12 @@ nct_var* nct_set_length(nct_var* dim, size_t arg) {
     return dim;
 }
 
+nct_var* nct_shorten_length(nct_var* dim, size_t arg) {
+    if (dim->len < arg)
+	return NULL;
+    return nct_set_length(dim, arg);
+}
+
 nct_var* nct_set_start(nct_var* dim, size_t arg) {
     long change = arg - dim->rule[nct_r_start].arg.lli; // new_start - old_start
     dim->rule[nct_r_start].arg.lli = arg;

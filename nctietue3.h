@@ -439,6 +439,7 @@ void nct_rm_var(nct_var* var);
  */
 nct_var* nct_set_length(nct_var* coord, size_t length);
 nct_var* nct_set_start(nct_var* coord, size_t offset);
+nct_var* nct_shorten_length(nct_var* coord, size_t arg); // returns NULL if (arg > coord->len)
 
 /* Untested!
    time0(var1) - time0(var0) in their time unit.
