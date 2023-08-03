@@ -55,7 +55,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 enum {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 #define TIMEUNITS TIMEUNIT(milliseconds) TIMEUNIT(seconds) TIMEUNIT(minutes) TIMEUNIT(hours) TIMEUNIT(days)
 
-static int timecoeff[] = {0, 1, 60, 3600, 84600};
+static long ms_per_timeunit[]	= {1,	1*1000,	60*1000,	3600*1000,	84600*1000};
 
 #define ONE_TYPE(nctype,b,ctype) [nctype] = #ctype,
 static const char* const nct_typenames[] = { ALL_TYPES };
@@ -1016,6 +1016,40 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     return result;
 }
 
+long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
+    nct_var* vars[] = {timevar0, timevar1};
+    nct_anyd time[2];
+
+    for(int i=0; i<2; i++) {
+	time[i] = nct_mktime(vars[i], NULL, NULL, 0);
+	if (time[i].d < 0)
+	    nct_return_error(-1);
+    }
+
+    int smaller = time[1].a.t < time[0].a.t;
+    long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
+    long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
+    nct_set_start(vars[smaller], diff_n);
+    return diff_n;
+}
+
+long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
+    nct_var* vars[] = {timevar0, timevar1};
+    nct_anyd time[2];
+
+    for(int i=0; i<2; i++) {
+	time[i] = nct_mktime(vars[i], NULL, NULL, vars[i]->len-1);
+	if (time[i].d < 0)
+	    nct_return_error(-1);
+    }
+
+    int smaller = time[1].a.t < time[0].a.t;
+    long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
+    long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
+    nct_set_length(vars[!smaller], vars[!smaller]->len - diff_n);
+    return diff_n;
+}
+
 static const int stack_size1 = 8;
 
 int nct_stack_not_empty(const nct_var* var) {
@@ -1405,20 +1439,6 @@ nct_var* nct_set_start(nct_var* dim, size_t arg) {
     nct_foreach(dim->super, var)
 	var->len = nct_get_len_from(var, 0);
     return dim;
-}
-
-time_t nct_timediff(const nct_var* var1, const nct_var* var0) {
-    struct tm tm1, tm0;
-    int unit1, unit0;
-    if (nct_interpret_timeunit(var1, &tm1, &unit1) | nct_interpret_timeunit(var0, &tm0, &unit0))
-	nct_return_error(1<<30);
-    if (unit1 != unit0) {
-	nct_puterror("timeunit mismatch (%s, %s)\n", nct_timeunits[unit1], nct_timeunits[unit0]);
-	nct_return_error(1<<30); }
-    if (!memcmp(&tm1, &tm0, sizeof(tm1)))
-	return 0;
-    time_t diff = mktime(&tm1) - mktime(&tm0);
-    return diff / timecoeff[unit0];
 }
 
 void nct_unlink_data(nct_var* var) {

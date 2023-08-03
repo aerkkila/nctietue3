@@ -281,6 +281,14 @@ nct_var* nct_load_stream(nct_var*, size_t);
 
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
+/* Calls nct_set_start making both timevariables to start at the same time.
+   Returns the number of timesteps removed or negative on error. */
+long nct_match_starttime(nct_var*, nct_var*);
+
+/* Calls nct_set_length making both timevariables to end at the same time.
+   Returns the number of timesteps removed or negative on error. */
+long nct_match_endtime(nct_var*, nct_var*);
+
 nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
 
 /*
@@ -440,11 +448,6 @@ void nct_rm_var(nct_var* var);
 nct_var* nct_set_length(nct_var* coord, size_t length);
 nct_var* nct_set_start(nct_var* coord, size_t offset);
 nct_var* nct_shorten_length(nct_var* coord, size_t arg); // returns NULL if (arg > coord->len)
-
-/* Untested!
-   time0(var1) - time0(var0) in their time unit.
-   Both must have the same time unit. */
-time_t nct_timediff(const nct_var* var1, const nct_var* var0);
 
 /* Write the data into new order.
    User must give the same dimensions as is in the variable but reordered. */
