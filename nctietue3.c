@@ -55,7 +55,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 enum {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 #define TIMEUNITS TIMEUNIT(milliseconds) TIMEUNIT(seconds) TIMEUNIT(minutes) TIMEUNIT(hours) TIMEUNIT(days)
 
-static long ms_per_timeunit[]	= {1,	1*1000,	60*1000,	3600*1000,	84600*1000};
+static long ms_per_timeunit[]	= {1,	1*1000,	60*1000,	3600*1000,	86400*1000};
 
 #define ONE_TYPE(nctype,b,ctype) [nctype] = #ctype,
 static const char* const nct_typenames[] = { ALL_TYPES };
