@@ -264,9 +264,11 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     if(dimname[0] == '-') {
 	/* A number tells which vardim to concatenate along. Defined based on dimensions of the first var. */
 	if(sscanf(dimname+1, "%i", &dimid0) == 1) {
-	    nct_var* tmpvar = nct_firstvar(vs0);
-	    if(dimid0 < tmpvar->ndims)
-		dimname = vs0->dims[tmpvar->dimids[dimid0]]->name;
+	    nct_foreach(vs0, v)
+		if (dimid0 < v->ndims) {
+		    dimname = vs0->dims[v->dimids[dimid0]]->name;
+		    break;
+		}
 	}
 	/* Not a concatenation but useful. */
 	else if(!strcmp(dimname, "-v")) {
