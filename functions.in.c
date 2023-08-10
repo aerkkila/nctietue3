@@ -22,7 +22,9 @@ static void nct_print_datum_@nctype(const void* vdatum) {
     printf("%@form", datum);
 }
 
-void _printhelper_@nctype(ctype* data, size_t i, size_t len) {
+static void _printhelper_@nctype(ctype* data, long i, long len) {
+    if (len < 1)
+	return;
     for(; i<len-1; i++) {
 	nct_print_datum_@nctype(data+i);
 	printf(", ");
