@@ -248,6 +248,23 @@ void nct_close_nc(nct_set* set) {
     set->ncid = 0;
 }
 
+void nct_allocate_varmem(nct_var* var) {
+    if (var->capacity >= var->len)
+	return;
+    if cannot_free(var)
+	var->data = malloc(var->len*nctypelen(var->dtype));
+    else
+	var->data = realloc(var->data, var->len*nctypelen(var->dtype));
+    var->capacity = var->len;
+    if (var->data)
+	return;
+
+    nct_puterror("memory allocation failed: %s\n", strerror(errno));
+    print_varerror(var, "    ");
+    var->capacity = 0;
+    nct_other_error;
+}
+
 /* Concatenation is not yet supported along other existing dimensions than the first one.
    Coordinates will be loaded if aren't already.
    Variable will not be loaded, except if the first is loaded and the second is not.
@@ -286,11 +303,28 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     dimid0 = nct_get_dimid(vs0, dimname);
     if (dimid0 < 0)
 	dimid0 = nct_dimid(nct_add_dim(vs0, 1, dimname));
+    /* We assert that zero length dimension does not belong to any variable yet and is safe to change to one. */
+    else if (vs0->dims[dimid0]->len == 0) {
+	nct_var* dim = vs0->dims[dimid0];
+	dim->len = 1;
+	if (nct_iscoord(dim)) {
+	    nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
+	    memset(dim->data, 0, nctypelen(dim->dtype));
+	}
+    }
     /* The dimension exists now in vs0 but not necessarily in vs1. */
     dimid1 = nct_get_dimid(vs1, dimname);
     if (dimid1 < 0)
 	vs0->dims[dimid0]->len++;
     else {
+	if (vs1->dims[dimid1]->len == 0) {
+	    nct_var* dim = vs1->dims[dimid1];
+	    dim->len = 1;
+	    if (nct_iscoord(dim)) {
+		nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
+		memset(dim->data, 0, nctypelen(dim->dtype));
+	    }
+	}
 	vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
 	/* If the dimension is also a variable, concat that */
 	if((varid0=nct_get_varid(vs0, dimname)) >= 0 &&
@@ -903,23 +937,6 @@ int nct_link_data(nct_var* dest, nct_var* src) {
     dest->data = src->data;
     dest->nusers = src->nusers;
     return 0;
-}
-
-void nct_allocate_varmem(nct_var* var) {
-    if (var->capacity >= var->len)
-	return;
-    if cannot_free(var)
-	var->data = malloc(var->len*nctypelen(var->dtype));
-    else
-	var->data = realloc(var->data, var->len*nctypelen(var->dtype));
-    var->capacity = var->len;
-    if (var->data)
-	return;
-
-    nct_puterror("memory allocation failed: %s\n", strerror(errno));
-    print_varerror(var, "    ");
-    var->capacity = 0;
-    nct_other_error;
 }
 
 static void perhaps_close_the_file(nct_set* set) {
