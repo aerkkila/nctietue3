@@ -946,7 +946,7 @@ static void perhaps_close_the_file(nct_set* set) {
 
 static void perhaps_open_the_file(nct_var* var) {
     if (var->super->ncid <= 0 && var->super->filename)
-	ncfunk(nc_open, var->super->filename, NC_NOWRITE, &var->super->ncid);
+	ncfunk_open(var->super->filename, NC_NOWRITE, &var->super->ncid);
 }
 
 #include "load_data.h" // nct_load_as
@@ -1198,7 +1198,7 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nct
     }
     int varid, ndims, dimids[128], dtype, ncid;
     size_t len=1, len1;
-    ncfunk(nc_open, filename, NC_NOWRITE, &ncid);
+    ncfunk_open(filename, NC_NOWRITE, &ncid);
     ncfunk(nc_inq_varid, ncid, varname, &varid);
     ncfunk(nc_inq_var, ncid, varid, NULL, &dtype, &ndims, dimids, NULL);
     for(int i=0; i<ndims; i++) {
@@ -1227,7 +1227,7 @@ static nct_set* nct_read_ncf_lazy(const char* filename, int flags) {
 
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int flags) {
     int ncid, ndims, nvars;
-    ncfunk(nc_open, filename, NC_NOWRITE, &ncid);
+    ncfunk_open(filename, NC_NOWRITE, &ncid);
     ncfunk(nc_inq_ndims, ncid, &ndims);
     ncfunk(nc_inq_nvars, ncid, &nvars);
     *dest = (nct_set){

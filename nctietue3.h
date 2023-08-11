@@ -48,6 +48,15 @@ extern FILE* nct_stderr;
 	}					\
     } while(0)
 
+#define ncfunk_open(name, access, idptr)			\
+    do {							\
+	if((nct_ncret = nc_open(name, access, idptr))) {	\
+	    ncerror(nct_ncret);					\
+	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", name);	\
+	    nct_other_error;					\
+	}							\
+    } while(0)
+
 extern int nct_ncret;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
