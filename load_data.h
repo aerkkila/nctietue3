@@ -74,15 +74,21 @@ static void load_for_real(nct_var* var, loadinfo_t* info) {
 }
 
 static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
-    int i = ndims - 1;
+    int idim = ndims - 1;
     size_t len = 1;
-    for(; i>=0; i--) {
-	size_t try = len * rect[i];
+    for(; idim>=0; idim--) {
+	size_t try = len * rect[idim];
 	if (try > maxsize)
-	    break;
+	    goto Break;
 	len = try;
     }
-    memset(rect, 0, (i+1)*sizeof(rect[0]));
+    return len;
+Break:
+    for(int i=0; i<idim; i++)
+	rect[i] = 1;
+    size_t n_idim = maxsize / len;
+    rect[idim] = n_idim;
+    len *= n_idim;
     return len;
 }
 
@@ -127,10 +133,12 @@ static void print_progress(const nct_var* var, const loadinfo_t* info, size_t le
 static int next_load(nct_var* var, loadinfo_t* info) {
     size_t start_thisfile;
     int filenum;
+    if (info->pos >= info->ndata)
+	return 2; // Data is ready.
     if (info->start >= var->len)
-	return 1;
+	return 1; // This file is ready.
     if (get_filenum(info->start, var, &filenum, &start_thisfile))
-	return 1; // an error which shouldn't happen
+	return -1; // an error which shouldn't happen
     if (filenum == 0) {
 	size_t len = set_info(var, info, start_thisfile);
 	if (nct_verbose)
@@ -169,11 +177,13 @@ static nct_var* load_coordinate_var(nct_var* var) {
     perhaps_open_the_file(var);
     ncfunk(getfulldata, var->super->ncid, var->ncid, var->data);
     perhaps_close_the_file(var->super);
+    var->startpos = 0;
+    var->endpos = var->len;
     var->data += var->rule[nct_r_start].arg.lli * size1;
     return var;
 }
 
-nct_var* nct_load_as(nct_var* var, nc_type dtype) {
+nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
     size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
     if (dtype != NC_NAT) {
 	if (var->dtype)
@@ -182,27 +192,37 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     }
     if (nct_iscoord(var))
 	return load_coordinate_var(var);
-    nct_allocate_varmem(var);
     nc_type type_finally = var->dtype;
     if (var->dtype == NC_CHAR) {
 	var->dtype = NC_NAT;
 	type_finally = NC_CHAR;
     }
+    size_t old_length = var->len;
+    var->len = end-start;
+    nct_allocate_varmem(var);
+    var->len = old_length;
     loadinfo_t info = {
 	.size1	= nctypelen(var->dtype),
 	.fstart	= fstart,
 	.fcount	= fcount,
-	.ndata	= var->len,
+	.ndata	= end - start,
 	.data	= var->data,
 	.getfun	= nct_getfun_partial[var->dtype],
+	.start	= start,
     };
     while (!next_load(var, &info));
-    if (var->len != info.pos)
-	nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, var->len);
+    if (info.ndata != info.pos)
+	nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, info.ndata);
+    var->startpos = start;
+    var->endpos = end;
     if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K"), fflush(stdout);
     var->dtype = type_finally;
     return var;
+}
+
+nct_var* nct_load_as(nct_var* var, nc_type dtype) {
+    return nct_load_partially_as(var, 0, var->len, dtype);
 }
 
 #undef MIN

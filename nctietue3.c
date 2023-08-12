@@ -349,10 +349,10 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    nct_add_vardim_first(var0, dimid0);
 	if (!var1)
 	    continue;
-	if (!var0->data)
+	if (var0->endpos < var0->len)
 	    nct_set_concat(var0, var1, howmany_left);
 	else {
-	    if(!var1->data)
+	    if(var1->endpos-var1->startpos < var1->len)
 		nct_load(var1); // Now data is written here and copied to var0. Not good.
 	    _nct_concat_var(var0, var1, dimid0, howmany_left);
 	}
@@ -657,6 +657,8 @@ next:;
 size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     long long sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
+    if (var->endpos)
+	sem[1] = var->endpos - var->startpos;
     while (1) {
 	if (sem[1]-sem[0] <= 1) {
 	    double v0 = getfun(var, sem[0]),
@@ -1075,6 +1077,16 @@ int nct_stack_not_empty(const nct_var* var) {
     return !!var->stackbytes;
 }
 
+nct_var* nct_perhaps_load_partially_as(nct_var* var, long start, long end, nc_type nctype) {
+    if (var->startpos > start || var->endpos < end)
+	nct_load_partially_as(var, start, end, nctype);
+    return var;
+}
+
+nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end) {
+    return nct_perhaps_load_partially_as(var, start, end, NC_NAT);
+}
+
 long long nct_pop_integer(nct_var* var) {
     long long ret;
     memcpy(&ret, var->stack + var->stackbytes - stack_size1, stack_size1);
@@ -1089,7 +1101,7 @@ void nct_push_integer(nct_var* var, long long integ) {
     var->stackbytes += stack_size1;
 }
 
-void nct_print_att(const nct_att* att, const char* indent) {
+void nct_print_att(nct_att* att, const char* indent) {
     printf("%s%s%s:\t ", indent, nct_att_color, att->name);
     if (att->dtype == NC_CHAR) {
 	printf("%s%s\n", (char*)att->value, nct_default_color);
@@ -1106,7 +1118,7 @@ void nct_print_att(const nct_att* att, const char* indent) {
 }
 
 /* Global but hidden function. */
-void nct_print_atts(const nct_var* var, const char* indent0, const char* indent1) {
+void nct_print_atts(nct_var* var, const char* indent0, const char* indent1) {
     char inde[strlen(indent0) + strlen(indent1)];
     strcpy(inde, indent0);
     strcat(inde, indent1);
@@ -1114,7 +1126,7 @@ void nct_print_atts(const nct_var* var, const char* indent0, const char* indent1
 	nct_print_att(var->atts + i, inde);
 }
 
-void nct_print_var(const nct_var* var, const char* indent) {
+void nct_print_var(nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
 	   nct_varname_color, var->name, var->len, nct_default_color,
@@ -1130,7 +1142,7 @@ void nct_print_var(const nct_var* var, const char* indent) {
     nct_print_atts(var, indent, "  ");
 }
 
-void nct_print_dim(const nct_var* var, const char* indent) {
+void nct_print_dim(nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n",
 	   indent, nct_type_color, nct_typenames[var->dtype],
 	   nct_dimname_color, var->name, var->len, nct_default_color);
@@ -1142,7 +1154,7 @@ void nct_print_dim(const nct_var* var, const char* indent) {
     nct_print_atts(var, indent, "  ");
 }
 
-void nct_print(const nct_set* set) {
+void nct_print(nct_set* set) {
     printf("%s%i variables, %i dimensions%s\n", nct_varset_color, set->nvars, set->ndims, nct_default_color);
     int n = set->ndims;
     for(int i=0; i<n; i++) {

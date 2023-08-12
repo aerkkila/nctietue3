@@ -7,7 +7,7 @@ $ntypes = @nctypes;
 
 # functions that begin with nct_var*
 $functions = '
-void      nct_print_data_@nctype(const nct_var*);
+void      nct_print_data_@nctype(nct_var*);
 nct_var*  nct_put_interval_@nctype(nct_var*, double, double);
 double    nct_get_floating_@nctype(const nct_var*, size_t);
 long long nct_get_integer_@nctype(const nct_var*, size_t);

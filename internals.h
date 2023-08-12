@@ -1,6 +1,6 @@
 /* The dimension has to exist on v0->super and its length has to be already increased.
    Currently, the dimension has to also be the first one. */
-static nct_var* _nct_concat_var(nct_var* v0, const nct_var* v1, int dimid0, int howmany_left) {
+static nct_var* _nct_concat_var(nct_var* v0, nct_var* v1, int dimid0, int howmany_left) {
     v0->len = nct_get_len_from(v0, 0); // recalculate length since dimensions have been changed
     if(!v0->ndims || v0->dimids[0] != dimid0)
 	nct_add_vardim_first(v0, dimid0);
