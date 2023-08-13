@@ -46,7 +46,7 @@ void nct_print_data_@nctype(nct_var* var) {
     printf(" ..., ");
     nct_readflags = old;
     nct_perhaps_load_partially(var, len-8, len);
-    _printhelper_@nctype(var->data, len-8, len);
+    _printhelper_@nctype(var->data, len-8-var->startpos, len-var->startpos);
 }
 
 ctype* nct_range_@nctype(ctype i0, ctype i1, ctype gap) {
@@ -92,18 +92,15 @@ long long nct_getatt_integer_@nctype(const nct_att* att, size_t ind) {
 }
 
 nct_anyd nct_max_anyd_@nctype(const nct_var* var) {
-#if CHECK_INVALID
-    if(!(var->len))
-	nct_return_error((nct_anyd){ {0}, -1 });
-#endif
+    long len = var->endpos - var->startpos;
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     size_t numi=0;
     ctype num = -INFINITY; //TODO: -ffinite-math-only
-    for(int i=0; i<var->len; i++)
+    for(int i=0; i<len; i++)
 #else
     size_t numi=0;
     ctype num = ((ctype*)var->data)[0];
-    for(size_t i=1; i<var->len; i++)
+    for(size_t i=1; i<len; i++)
 #endif
 	if(num < ((ctype*)var->data)[i])
 	    num = ((ctype*)var->data)[numi=i];
@@ -119,19 +116,16 @@ long long nct_max_integer_@nctype(const nct_var* var) {
 }
 
 nct_anyd nct_min_anyd_@nctype(const nct_var* var) {
-#if CHECK_INVALID
-    if(!(var->len))
-	nct_return_error((nct_anyd){ {0}, -1 });
-#endif
     /* using the first value would not work with nan-values */
+    long len = var->endpos - var->startpos;
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     size_t numi=0;
     ctype num = INFINITY;
-    for(int i=0; i<var->len; i++)
+    for(int i=0; i<len; i++)
 #else
     size_t numi=0;
     ctype num = ((ctype*)var->data)[0];
-    for(size_t i=1; i<var->len; i++)
+    for(size_t i=1; i<len; i++)
 #endif
 	if(num > ((ctype*)var->data)[i])
 	    num = ((ctype*)var->data)[numi=i];
@@ -147,19 +141,16 @@ long long nct_min_integer_@nctype(const nct_var* var) {
 }
 
 void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
-#if CHECK_INVALID
-    if(!(var->len))
-	nct_return_error(NULL);
-#endif
     ctype maxval, minval, *result=vresult;
+    long len = var->endpos - var->startpos;
     /* using the first value would not work with nan-values */
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     maxval = -INFINITY;
     minval = INFINITY;
-    for(int i=0; i<var->len; i++)
+    for(int i=0; i<len; i++)
 #else
     maxval = minval = ((ctype*)var->data)[0];
-    for(int i=1; i<var->len; i++)
+    for(int i=1; i<len; i++)
 #endif
 	if(maxval < ((ctype*)var->data)[i])
 	    maxval = ((ctype*)var->data)[i];
@@ -171,18 +162,14 @@ void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
 }
 
 void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult) {
-#if CHECK_INVALID
-    if (!(var->len))
-	nct_return_error(NULL);
-#endif
     ctype maxval, minval, *result=vresult, nanval=nanval_long;
+    long len = var->endpos - var->startpos;
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
 #define _my_isnan(a) (!((a) == (a)) || (a) == nanval)
 #else
 #define _my_isnan(a) ((a) == nanval)
 #endif
     int i=0;
-    int len = var->len;
     for (; i<len && _my_isnan(((ctype*)var->data)[i]); i++);
     if (i == len) {
 	result[0] = result[1] = nanval;
@@ -204,6 +191,8 @@ void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult
 }
 
 nct_var* nct_mean_first_@nctype(nct_var* var) {
+    if(var->endpos - var->startpos < var->len)
+	nct_load(var);
     size_t zerolen = var->super->dims[var->dimids[0]]->len;
     size_t new_len = var->len / zerolen;
     for(size_t i=0; i<new_len; i++) {
@@ -215,6 +204,8 @@ nct_var* nct_mean_first_@nctype(nct_var* var) {
 }
 
 nct_var* nct_meannan_first_@nctype(nct_var* var) {
+    if(var->endpos - var->startpos < var->len)
+	nct_load(var);
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     size_t zerolen = var->super->dims[var->dimids[0]]->len;
     size_t new_len = var->len / zerolen;

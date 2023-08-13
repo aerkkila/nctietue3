@@ -104,17 +104,15 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     size_t move[nct_maxdims] = {0};
     move[var->ndims-1] = startpos;
     make_coordinates(move, info->fcount, var->nfiledims);
-    int first = 1;
     for(int i=var->nfiledims-1; i>=0; i--) {
 	if (move[i]) {
 	    info->fstart[i] += move[i];
-	    if (first)
-		info->fcount[i] -= move[i];
-	    first = 0;
-	    continue;
+	    info->fcount[i] -= move[i];
+	    /* We can only read rectangles, and hence, we must stop at the first limited dimension. */
+	    for(int j=0; j<i; j++)
+		info->fcount[j] = 1;
+	    break;
 	}
-	if (!first)
-	    info->fcount[i] = 0;
     }
     /* Make sure not to read more than asked. */
     size_t len = limit_rectangle(info->fcount, var->nfiledims, info->ndata - info->pos);
@@ -185,6 +183,11 @@ static nct_var* load_coordinate_var(nct_var* var) {
 
 nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
     size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
+    if ((var->dtype == NC_CHAR) + (dtype == NC_CHAR) + 2*(dtype == NC_NAT) == 1) {
+	nct_puterror("Cannot convert to or from NC_CHAR. Variable %s%s%s in %s%s%s\n",
+		nct_varname_color, var->name, nct_default_color, nct_varset_color, var->super->filename, nct_default_color);
+	nct_return_error(NULL);
+    }
     if (dtype != NC_NAT) {
 	if (var->dtype)
 	    var->capacity *= nctypelen(dtype) / nctypelen(var->dtype);
@@ -192,11 +195,6 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
     }
     if (nct_iscoord(var))
 	return load_coordinate_var(var);
-    nc_type type_finally = var->dtype;
-    if (var->dtype == NC_CHAR) {
-	var->dtype = NC_NAT;
-	type_finally = NC_CHAR;
-    }
     size_t old_length = var->len;
     var->len = end-start;
     nct_allocate_varmem(var);
@@ -217,7 +215,6 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
     var->endpos = end;
     if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K"), fflush(stdout);
-    var->dtype = type_finally;
     return var;
 }
 
