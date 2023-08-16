@@ -184,6 +184,7 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
     memcpy(var->dimids, dimids, ndims*sizeof(int));
     set->nvars++;
     var->len = nct_get_len_from(var, 0);
+    var->endpos = var->len; // User will provide the data before using it.
     return var;
 failed:
     startpass;
