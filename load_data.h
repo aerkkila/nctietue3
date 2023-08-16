@@ -182,6 +182,8 @@ static nct_var* load_coordinate_var(nct_var* var) {
 }
 
 nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
+    if (!nct_loadable(var))
+	return NULL;
     size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
     if ((var->dtype == NC_CHAR) + (dtype == NC_CHAR) + 2*(dtype == NC_NAT) == 1) {
 	nct_puterror("Cannot convert to or from NC_CHAR. Variable %s%s%s in %s%s%s\n",

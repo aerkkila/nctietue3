@@ -382,15 +382,12 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
     if(time1_anyd.d < 0)
 	return NULL;
 
-    if (!var->data) {
-	if nct_loadable(var)
-	    nct_load(var);
-	else {
+    if (!var->data)
+	if (!nct_load(var)) {
 	    if (!var->dtype)
 		var->dtype = time1_anyd.d <= nct_seconds ? NC_INT64 : NC_INT;
 	    nct_put_interval(var, 0, 1);
 	}
-    }
 
     sec1 = mktime(nct_localtime(1, time1_anyd)) - mktime(nct_localtime(0, time1_anyd)); // days -> 86400 etc.
     int len = var->len;

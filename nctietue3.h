@@ -155,7 +155,7 @@ struct nct_anyd {
 };
 
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
-#define nct_loadable(var) ((var)->super->ncid > 0 || (var)->super->filename)
+#define nct_loadable(var) (var->ncid>=0 && ((var)->super->ncid > 0 || (var)->super->filename))
 
 #define nct_varid(var) ((var)->id_var-1)
 #define nct_dimid(var) ((var)->id_dim-1)
