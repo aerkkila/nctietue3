@@ -21,6 +21,7 @@ static nct_var* _nct_concat_var(nct_var* v0, nct_var* v1, int dimid0, int howman
     }
     void* ptr = v0->data + (v0->len - v1->len) * s1;
     memcpy(ptr, v1->data, v1->len*s1);
+    v0->endpos = v0->len;
     return v0;
 }
 
