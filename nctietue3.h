@@ -543,7 +543,7 @@ nct_var*  nct_meannan_first(nct_var*);
 /* Returns existing filenames that match a regular expression.
  * regex:
  *	A regular expression.
- *	In regex = "dir/file", dir is matched literally and file as a regular expression but preceeded with ^ (start of line).
+ *	In regex = "dir/file", dir is matched literally and file as a regular expression
  * regex_cflags:
  *	See cflags in man regex. If unsure, say 0. If things don't work, say REGEX_EXTENDED.
  *

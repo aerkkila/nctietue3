@@ -1563,7 +1563,10 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
     /* open the directory */
     int p2 = strlen(filename) - ind;
     char str[(p2>ind? p2: ind) + 2];
-    if (ind) { strncpy(str, filename, ind); str[ind] = '\0'; }
+    if (ind) {
+	strncpy(str, filename, ind);
+	str[ind] = '\0';
+    }
     else strcpy(str, ".");
     dirname = strdup(str);
     dp = opendir(dirname);
