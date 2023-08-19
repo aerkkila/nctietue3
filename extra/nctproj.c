@@ -19,7 +19,7 @@ typedef struct {
 
 static int iround(double a) {
     int i = a;
-    i += (a-i) >= 0.5;
+    i += ((a-i) >= 0.5) - ((a-i) <= -0.5);
     return i;
 }
 
