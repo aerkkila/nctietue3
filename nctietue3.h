@@ -176,6 +176,7 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 void nct_close_nc(nct_set*); // calls nc_close(set->ncid)
 
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
+nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
 
 /* see nct_mktime0 */
 nct_var* nct_convert_timeunits(nct_var* var, const char* units);
@@ -244,6 +245,9 @@ nct_var* nct_lastvar(const nct_set*);
 
 #define nct_foreach(set, var) \
     for(nct_var* var=nct_firstvar(set); var; var=nct_nextvar(var))
+
+#define nct_for_concatlist(invar, outvar) \
+    for(nct_var* outvar=nct_iterate_concatlist(invar); outvar; outvar=nct_iterate_concatlist(NULL))
 
 #define nct_free(...) _nct_free(0, __VA_ARGS__, -1)
 void _nct_free(int _, ...); // first argument is meaningless

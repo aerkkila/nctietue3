@@ -1,4 +1,3 @@
-#define from_concatlist(var, num) (((nct_var**)(var)->rule[nct_r_concat].arg.v)[num])
 #define MIN(a, b) ((a) <= (b) ? a : (b))
 
 typedef struct {
@@ -225,4 +224,3 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 }
 
 #undef MIN
-#undef from_concatlist

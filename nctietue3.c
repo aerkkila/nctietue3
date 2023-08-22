@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
+#define from_concatlist(var, num) (((nct_var**)(var)->rule[nct_r_concat].arg.v)[num])
 
 #define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
 
@@ -138,6 +139,13 @@ void* nct_getfun_1[] = {
 #endif
 
 #include "transpose.c"
+
+static void verbose_line_ending() {
+    if (nct_verbose == nct_verbose_overwrite)
+	printf("\033[K\r"), fflush(stdout);
+    else if (nct_verbose == nct_verbose_newline)
+	putchar('\n');
+}
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name) {
     if (set->dimcapacity < set->ndims+1) {
@@ -1301,6 +1309,16 @@ nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim,
 	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
     char* names = nct__get_filenames_(filename, 0, matchfun, size1, nmatch, matchdest);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
+    if (nct_verbose) {
+	char* str = names;
+	printf("match from %s:", filename);
+	verbose_line_ending();
+	while (*str) {
+	    printf("%s", str);
+	    verbose_line_ending();
+	    str += strlen(str) + 1;
+	}
+    }
     if (num == 0) {
 	free(names);
 	nct_puterror("No files match \"%s\"\n", filename);
@@ -1456,6 +1474,20 @@ nct_var* nct_shorten_length(nct_var* dim, size_t arg) {
     if (dim->len < arg)
 	return NULL;
     return nct_set_length(dim, arg);
+}
+
+nct_var* nct_iterate_concatlist(nct_var* var) {
+    static int n_concat, iconcat;
+    static nct_var* svar;
+    if (var) {
+	svar = var;
+	n_concat = !!hasrule(var, nct_r_concat) * var->rule[nct_r_concat].n;
+	iconcat = 0;
+	return var;
+    }
+    if (iconcat++ >= n_concat)
+	return NULL;
+    return from_concatlist(svar, iconcat-1);
 }
 
 nct_var* nct_set_start(nct_var* dim, size_t arg) {
