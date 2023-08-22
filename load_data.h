@@ -63,7 +63,7 @@ static int get_filenum(long start, nct_var* var, int* farg, size_t* parg) {
 	p = ptry;
 	f++;
     }
-    nct_puterror("Didn't find starting location\n");
+    nct_puterror("Didn't find starting location (%li) from %s\n", start, var->super->filename);
     return 1;
 }
 
