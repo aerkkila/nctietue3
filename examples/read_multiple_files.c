@@ -38,7 +38,7 @@ void create_the_files() {
 }
 
 int main() {
-    //create_the_files();
+    create_the_files();
     /* All previously written files can be read as if they were one file.
        Names are matched using a regular expression.
        The second argument is regex_flags. See posix regex documentation for details.
@@ -47,6 +47,29 @@ int main() {
        That is possible since we added the attribute "units": "days since yyyy-01-01", which this library recognizes. */
     nct_set* set = nct_read_mfnc_regex("multifile_[0-9]*\\.nc", 0, "-0");
     nct_print(set);
-    nct_write_nc(set, "multifile_as_one.nc");
+    nct_write_nc(set, "multifile_combined.nc");
+    nct_free1(set);
+
+    /* A region can be selected from multifile set as follows. */
+    nct_readflags = nct_rcoord; // Do not load the data yet.
+    set = nct_read_mfnc_regex("multifile_[0-9]*\\.nc", 0, "-0");
+    /* The region must be selected individually from each file using a loop.
+       Concatenation is variable-wise, not dataset-wise, hence we must pick a variable.
+       This will affect all the other variables as well if they share the same dimensions. */
+    nct_var* var = nct_firstvar(set);
+    nct_for_concatlist(var, concatvar) {
+	nct_set_start(nct_get_vardim(concatvar, concatvar->ndims-1), 80);
+	nct_set_length(nct_get_vardim(concatvar, concatvar->ndims-2), 30);
+    }
+    /* The first dimension is used in concatenation in this case.
+       If we would like to omit n days from each year, we would need a loop as above.
+       If we want to omit 500 days from the start, we can just do it as follows,
+       even if a single file is not 500 days long. */
+    nct_set_start(nct_get_vardim(var, 0), 500);
+    /* Now we can load the data */
+    nct_verbose = nct_verbose_newline; // This helps to see that the correct data are loaded.
+    nct_load(var);
+    nct_print(set);
+    nct_write_nc(set, "multifile_regions_combined.nc");
     nct_free1(set);
 }

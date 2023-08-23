@@ -1445,7 +1445,7 @@ nct_var* nct_update_concatlist(nct_var* var0) {
     if (!start_trunc_new)
 	return var0;
 
-    nct_var* var1 = get_var_from_filenum(var0, fileno);
+    nct_var* var1 = fileno ? from_concatlist(var0, fileno-1) : var0;
     nct_set_length(var1, start_trunc_new);
     nct_update_concatlist(var1);
     return var0;
