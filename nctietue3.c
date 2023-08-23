@@ -1161,6 +1161,8 @@ void nct_print_dim(nct_var* var, const char* indent) {
 }
 
 void nct_print(nct_set* set) {
+    if (set->filename)
+	printf("%s:\n", set->filename);
     printf("%s%i variables, %i dimensions%s\n", nct_varset_color, set->nvars, set->ndims, nct_default_color);
     int n = set->ndims;
     for(int i=0; i<n; i++) {

@@ -1,4 +1,5 @@
 #define MIN(a, b) ((a) <= (b) ? a : (b))
+#define MAX(a, b) ((a) >= (b) ? a : (b))
 
 typedef struct {
     /* constants after initialization */
@@ -6,7 +7,7 @@ typedef struct {
     size_t ndata;
     nct_ncget_partial_t getfun;
     /* mutable variables */
-    size_t *fstart, *fcount, start;
+    size_t *fstart, *fcount, *f_used, varstart, filestart;
     /* restricted: only incremented at loading */
     size_t pos;
     void* data;
@@ -18,12 +19,12 @@ static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
     for(int i=ndims-1; i>=0; i--) {
 	num = arr[i]*dimlen + carry;
 	long next_dimlen = dimlen * dims[i];
-	long consumes = num % next_dimlen;
-	arr[i] = consumes / dimlen;
+	long num_thisdim = num % next_dimlen;
+	arr[i] = num_thisdim / dimlen;
 	dimlen = next_dimlen;
-	carry = num - consumes;
+	carry = num - num_thisdim;
     }
-    return carry;
+    return carry / dimlen;
 }
 
 static nct_var* get_var_from_filenum(nct_var* var, int num) {
@@ -39,27 +40,33 @@ static size_t get_filelen(const nct_var* var) {
     return len;
 }
 
-static size_t var_offset(const nct_var* var) {
-    size_t offset = 0, cumlen = 1;
-    for(int i=var->ndims-1; i>=0; i--) {
-	nct_var* dim = nct_get_vardim(var, i);
-	offset += dim->rule[nct_r_start].arg.lli * cumlen;
-	cumlen *= dim->len;
-    }
-    return offset;
+static size_t var_offset(const nct_var* var) { // only in the first dimension
+    size_t length = 1;
+    for(int i=var->ndims-1; i>0; i--)
+	length *= nct_get_vardim(var, i)->len;
+    return nct_get_vardim(var, 0)->rule[nct_r_start].arg.lli * length;
 }
 
-static int get_filenum(long start, nct_var* var, int* farg, size_t* parg) {
+static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_out) {
     int f = 0, nfiles = var->rule[nct_r_concat].n + 1;
-    long p = 0; // must be signed: if offset > filelen; then ptry_0 < 0
+    long length = 0; // must be signed if offset > filelen
     while (f < nfiles) {
-	long ptry = p + (f ? get_var_from_filenum(var, f)->len : get_filelen(var) - var_offset(var));
-	if (ptry > start) {
-	    *parg = start - p; // where to start reading this file
-	    *farg = f;
+	long add;
+	if (f) {
+	    nct_var* varnow = get_var_from_filenum(var, f);
+	    long try1 = varnow->len,
+		 try2 = get_filelen(varnow);
+	    add = MAX(try1, try2);
+	}
+	else
+	    add = get_filelen(var) - var_offset(var);
+	long new_length = length + add;
+	if (new_length > start) {
+	    *start_out = start - length; // where to start reading this file
+	    *ifile_out = f;
 	    return 0;
 	}
-	p = ptry;
+	length = new_length;
 	f++;
     }
     nct_puterror("Didn't find starting location (%li) from %s\n", start, var->super->filename);
@@ -91,50 +98,76 @@ Break:
     return len;
 }
 
-/* fstart, fcount */
+/* fstart, fcount, f_used
+   f_used tells how many data we move forward in the file at the load function.
+   It can be larger than fcount because we can omit data on the way. */
 static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     int n_extra = var->ndims - var->nfiledims;
+    /* fstart and fcount omitting startpos */
     for(int i=var->nfiledims-1; i>=0; i--) {
 	nct_var* dim = nct_get_vardim(var, i+n_extra);
 	info->fstart[i] = dim->rule[nct_r_start].arg.lli;
 	info->fcount[i] = MIN(var->filedimensions[i] - info->fstart[i], dim->len);
+	info->f_used[i] = var->filedimensions[i];
     }
-    /* startpos */
+    /* correct fstart and fcount with startpos */
     size_t move[nct_maxdims] = {0};
+    /* startpos is the index in the flattened array
+       move is the index vector in the file array */
     move[var->ndims-1] = startpos;
-    make_coordinates(move, info->fcount, var->nfiledims);
+    size_t result;
+    if ((result = make_coordinates(move, info->fcount, var->nfiledims)))
+	nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, var->super->filename, var->name);
     for(int i=var->nfiledims-1; i>=0; i--) {
 	if (move[i]) {
 	    info->fstart[i] += move[i];
 	    info->fcount[i] -= move[i];
-	    /* We can only read rectangles, and hence, we must stop at the first limited dimension. */
-	    for(int j=0; j<i; j++)
+	    info->f_used[i] -= move[i];
+	    /* We can only read rectangles, and hence, we must stop at the first such dimension from behind,
+	       where startpos is in the middle of the used area. */
+	    for(int j=0; j<i; j++) {
 		info->fcount[j] = 1;
+		info->f_used[j] = 1;
+	    }
 	    break;
 	}
     }
     /* Make sure not to read more than asked. */
     size_t len = limit_rectangle(info->fcount, var->nfiledims, info->ndata - info->pos);
+    /* Limiting f_used as well should not be needed. */
     return len;
 }
 
 static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
-    printf("Loading %zu %% (%zu / %zu); %zu from %i: %s",
-	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, len, info->ifile, var->super->filename);
+    printf("Loading %zu %% (%zu / %zu); n=%zu; start={%li",
+	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, len, info->fstart[0]);
+    for(int i=1; i<var->nfiledims; i++)
+	printf(", %li", info->fstart[i]);
+    printf("}; count={%li", info->fcount[0]);
+    for(int i=1; i<var->nfiledims; i++)
+	printf(", %li", info->fcount[i]);
+    printf("}; from %i: %s", info->ifile, var->super->filename);
     if (nct_verbose == nct_verbose_newline)
 	putchar('\n');
     else if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K\r"), fflush(stdout);
 }
 
+static size_t get_rect_size(const size_t* sizes, int ndims) {
+    size_t cumdimlen = 1;
+    for (int i=ndims-1; i>=0; i--)
+	cumdimlen *= sizes[i];
+    return cumdimlen;
+}
+
 static int next_load(nct_var* var, loadinfo_t* info) {
     size_t start_thisfile;
     int filenum;
     if (info->pos >= info->ndata)
-	return 2; // Data is ready.
-    if (info->start >= var->len)
-	return 1; // This file is ready.
-    if (get_filenum(info->start, var, &filenum, &start_thisfile))
+	return 2; // All data are ready.
+    if (info->varstart >= var->len)
+	return 1; // This virtual file is ready.
+    if (get_filenum(info->filestart, var, &filenum, &start_thisfile))
 	return -1; // an error which shouldn't happen
     if (filenum == 0) {
 	size_t len = set_info(var, info, start_thisfile);
@@ -143,18 +176,22 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	load_for_real(var, info);
 	info->data += len * info->size1;
 	info->pos += len;
-	info->start += len;
+	info->varstart += len;
+	info->filestart += get_rect_size(info->f_used, var->nfiledims);
 	info->ifile++;
 	return 0;
     }
     /* If this wasn't the first file, we call this function again to handle
        concatenation rules correctly on this file. */
     nct_var* var1 = get_var_from_filenum(var, filenum);
-    size_t old_start = info->start;
-    info->start	= start_thisfile;
+    size_t old_start[] = {info->varstart, info->filestart};
+    info->varstart = info->filestart = start_thisfile;
     while(!next_load(var1, info));
-    size_t readlen = info->start-start_thisfile;
-    info->start = old_start + readlen;
+    info->varstart = info->varstart - start_thisfile + old_start[0];
+    info->filestart = info->filestart - start_thisfile + old_start[1];
+    /*
+    size_t readlen = info->filestart - start_thisfile;
+    info->start = old_start + readlen;*/
     return 0;
 }
 
@@ -183,7 +220,7 @@ static nct_var* load_coordinate_var(nct_var* var) {
 nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
     if (!nct_loadable(var))
 	return NULL;
-    size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
+    size_t fstart[nct_maxdims], fcount[nct_maxdims], f_used[nct_maxdims]; // start and count in a real file
     if ((var->dtype == NC_CHAR) + (dtype == NC_CHAR) + 2*(dtype == NC_NAT) == 1) {
 	nct_puterror("Cannot convert to or from NC_CHAR. Variable %s%s%s in %s%s%s\n",
 		nct_varname_color, var->name, nct_default_color, nct_varset_color, var->super->filename, nct_default_color);
@@ -204,10 +241,12 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 	.size1	= nctypelen(var->dtype),
 	.fstart	= fstart,
 	.fcount	= fcount,
+	.f_used = f_used,
 	.ndata	= end - start,
 	.data	= var->data,
 	.getfun	= nct_getfun_partial[var->dtype],
-	.start	= start,
+	.varstart	= start,
+	.filestart	= start,
     };
     while (!next_load(var, &info));
     if (info.ndata != info.pos)
