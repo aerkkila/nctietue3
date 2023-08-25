@@ -228,7 +228,7 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 	    var->capacity *= nctypelen(dtype) / nctypelen(var->dtype);
 	var->dtype = dtype;
     }
-    if (nct_iscoord(var))
+    if (nct_iscoord(var) || !var->ndims)
 	return load_coordinate_var(var);
     size_t old_length = var->len;
     var->len = end-start;
