@@ -34,7 +34,7 @@ static size_t get_read_length(const nct_var* var) {
     for(int i=0; i<ndims; i++) {
 	long omitted, omit0, omit1;
 	long flen = var->filedimensions[ndims-i-1];
-	const nct_var* dim = nct_get_vardim(var, ndims-i-1);
+	const nct_var* dim = nct_get_vardim(var, var->ndims-i-1);
 	omit0 = dim->rule[nct_r_start].arg.lli;
 	if (omit0 >= flen)
 	    omitted = flen;
@@ -50,12 +50,17 @@ static size_t get_read_length(const nct_var* var) {
 }
 
 static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_out) {
+    if (!var->ndims) {
+	if (start == 0)
+	    return 0;
+	else
+	    goto error;
+    }
     int ifile = 0, nfiles = var->rule[nct_r_concat].n + 1;
     long length = 0, length_diff = 0;
     long add = get_read_length(var);
 
-    int n_extra = var->ndims - var->nfiledims;
-    nct_var* dim0 = nct_get_vardim(var, n_extra);
+    nct_var* dim0 = nct_get_vardim(var, 0);
     long carried_dimstart = dim0->rule[nct_r_start].arg.lli - var->filedimensions[0];
     carried_dimstart *= (carried_dimstart > 0);
 
@@ -71,8 +76,13 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 	    break;
 	nct_var* cvar = from_concatlist(var, ifile-1);
 
-	int n_extra = cvar->ndims - cvar->nfiledims;
-	nct_var* dim0 = nct_get_vardim(cvar, n_extra);
+	if (!cvar->ndims) {
+	    length_diff = 0;
+	    add = 1;
+	    continue;
+	}
+
+	nct_var* dim0 = nct_get_vardim(cvar, 0);
 	long old_start = dim0->rule[nct_r_start].arg.lli;
 	long old_length = cvar->len;
 	nct_set_start(dim0, old_start + carried_dimstart);
@@ -85,6 +95,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 	    add = cvar->len;
 	nct_set_start(dim0, old_start);
     }
+error:
     nct_puterror("Didn't find starting location (%li) from %s\n", start, var->super->filename);
     return 1;
 }
@@ -118,6 +129,11 @@ Break:
 static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     int n_extra = var->ndims - var->nfiledims;
     /* fstart and fcount omitting startpos */
+    if (var->nfiledims == 0) {
+	info->fstart[0] = 0;
+	info->fcount[0] = 1;
+	return 1;
+    }
     for(int i=var->nfiledims-1; i>=0; i--) {
 	nct_var* dim = nct_get_vardim(var, i+n_extra);
 	info->fstart[i] = dim->rule[nct_r_start].arg.lli;
@@ -228,7 +244,7 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 	    var->capacity *= nctypelen(dtype) / nctypelen(var->dtype);
 	var->dtype = dtype;
     }
-    if (nct_iscoord(var) || !var->ndims)
+    if (nct_iscoord(var))
 	return load_coordinate_var(var);
     size_t old_length = var->len;
     var->len = end-start;

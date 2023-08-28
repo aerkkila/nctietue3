@@ -175,6 +175,7 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
 void nct_close_nc(nct_set*); // calls nc_close(set->ncid)
 
+nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars);
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
 nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
 
@@ -199,7 +200,7 @@ int nct_create_nc_def(nct_set* src, const char* name);
 int nct_createcoords_nc_def(nct_set* src, const char* name);
 
 nct_att* nct_copy_att(nct_var*, const nct_att*);
-nct_var* nct_copy_var(nct_set*, nct_var*, int link);
+nct_var* nct_copy_var(nct_set*, nct_var*, int link); // data are copied, if link is false
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
 #define nct_create_simple_gd(...) _nct_create_simple_gd(__VA_ARGS__, 0)

@@ -274,7 +274,7 @@ void nct_allocate_varmem(nct_var* var) {
     nct_other_error;
 }
 
-/* Concatenation is not yet supported along other existing dimensions than the first one.
+/* Concatenation is currently not supported along other existing dimensions than the first one.
    Coordinates will be loaded if aren't already.
    Variable will not be loaded, except if the first is loaded and the second is not.
    When unloaded sets are concatenated, they must not be freed before loading the data.
@@ -283,7 +283,7 @@ void nct_allocate_varmem(nct_var* var) {
    *	free(set1)
    *	load(set0->vars[n])
    */
-nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left) {
+nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
     int dimid0, dimid1, varid0=0, varid1;
     if(!dimname)
 	dimname = "-0";
@@ -300,7 +300,9 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	else if(!strcmp(dimname, "-v")) {
 	    varid1=-1;
 	    nct_foreach(vs1, var1) {
+		nct_load(var1);
 		nct_var* var = nct_copy_var(vs0, var1, 1);
+		var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
 		nct_ensure_unique_name(var);
 	    }
 	    return vs0;
@@ -312,7 +314,7 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     dimid0 = nct_get_dimid(vs0, dimname);
     if (dimid0 < 0)
 	dimid0 = nct_dimid(nct_add_dim(vs0, 1, dimname));
-    /* We assert that zero length dimension does not belong to any variable yet and is safe to change to one. */
+    /* We assume that zero length dimension does not belong to any variable yet and is safe to change to one. */
     else if (vs0->dims[dimid0]->len == 0) {
 	nct_var* dim = vs0->dims[dimid0];
 	dim->len = 1;
@@ -352,9 +354,12 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     /* Finally concatenate all variables.
        Called concat-functions change var->len but not vardim->len which has already been changed here
        so that changes would not cumulate when having multiple variables. */
-    nct_foreach(vs0, var0) {
+    //nct_foreach(vs0, var0) {
+    int iloop = 0;
+    nct_var* var0 = varids0 ? vs0->vars[varids0[iloop]] : nct_firstvar(vs0);
+    do {
 	nct_var* var1 = nct_get_var(vs1, var0->name);
-	if (nct_get_vardimid(var0, dimid0) < 0)
+	if (nct_get_vardimid(var0, dimid0) < 0) // TODO: Why do we need this before continue?
 	    nct_add_vardim_first(var0, dimid0);
 	if (!var1)
 	    continue;
@@ -366,7 +371,14 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 	    _nct_concat_var(var0, var1, dimid0, howmany_left);
 	}
     }
+    while (++iloop != nvars && (
+	    (varids0 && (var0 = vs0->vars[varids0[iloop]])) ||
+	    (var0 = nct_nextvar(var0))));
     return vs0;
+}
+
+nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left) {
+    return nct_concat_varids(vs0, vs1, dimname, howmany_left, NULL, -1);
 }
 
 nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
@@ -491,8 +503,8 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     return var;
 }
 
-/* Compiler doesn't understand that we check elsewhere that ndims < 100
-   and hence, sprintf(dimname+1, "%i" ndims++) is safe. */
+/* The compiler doesn't understand that we have checked that ndims < 100
+   and hence, sprintf(dimname+1, "%i" ndims++) won't overflow. */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-overflow"
 static nct_set* nct_create_simple_v_gd(nct_set* s, void* dt, int dtype, va_list args) {
