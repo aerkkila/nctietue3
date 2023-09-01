@@ -172,10 +172,7 @@ static void print_progress(const nct_var* var, const loadinfo_t* info, size_t le
     for(int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fcount[i]);
     printf("}; from %i: %s", info->ifile, var->super->filename);
-    if (nct_verbose == nct_verbose_newline)
-	putchar('\n');
-    else if (nct_verbose == nct_verbose_overwrite)
-	printf("\033[K\r"), fflush(stdout);
+    verbose_line_ending();
 }
 
 static int next_load(nct_var* var, loadinfo_t* info) {
@@ -264,8 +261,6 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 	nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, info.ndata);
     var->startpos = start;
     var->endpos = end;
-    if (nct_verbose == nct_verbose_overwrite)
-	printf("\033[K"), fflush(stdout);
     return var;
 }
 
