@@ -37,14 +37,18 @@ static void get_coordinate_limits(double xlim[2], double ylim[2], const nct_var*
 	for(int i=xlen_old-1; i>=0; i--) {
 	    pjc.xy.x = x0 + i*xdiff;
 	    PJ_XY xy = proj_trans(pj, 1, pjc).xy;
-	    if (xy.x < xlim[0])
-		xlim[0] = xy.x;
-	    if (xy.x > xlim[1])
-		xlim[1] = xy.x;
-	    if (xy.y < ylim[0])
-		ylim[0] = xy.y;
-	    if (xy.y > ylim[1])
-		ylim[1] = xy.y;
+	    if (isnormal(xy.x) || xy.x == 0) {
+		if (xy.x < xlim[0])
+		    xlim[0] = xy.x;
+		if (xy.x > xlim[1])
+		    xlim[1] = xy.x;
+	    }
+	    if (isnormal(xy.y) || xy.y == 0) {
+		if (xy.y < ylim[0])
+		    ylim[0] = xy.y;
+		if (xy.y > ylim[1])
+		    ylim[1] = xy.y;
+	    }
 	}
     }
 }
