@@ -74,11 +74,11 @@ static int* mkconversion(const nct_var* var, const char* from, const char* to, n
     /* The new coordinate spacing is defined such that the total frame size stays approximately the same. */
     for(int i=0; i<2; i++) {
 	if (args->new_xlim[i] && !isnormal(args->new_xlim[i])) {
-	    nct_puterror("%s xlimit is %lf\n", i? "lower": "higher", args->new_xlim[i]);
+	    nct_puterror("%s xlimit is %lf\n", !i? "lower": "higher", args->new_xlim[i]);
 	    return NULL;
 	}
 	if (args->new_ylim[i] && !isnormal(args->new_ylim[i])) {
-	    nct_puterror("%s xlimit is %lf\n", i? "lower": "higher", args->new_xlim[i]);
+	    nct_puterror("%s ylimit is %lf\n", !i? "lower": "higher", args->new_xlim[i]);
 	    return NULL;
 	}
     }
