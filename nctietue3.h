@@ -253,6 +253,7 @@ nct_var* nct_lastvar(const nct_set*);
 #define nct_free(...) _nct_free(0, __VA_ARGS__, -1)
 void _nct_free(int _, ...); // first argument is meaningless
 void nct_free1(nct_set*);
+nct_set* nct_clear(nct_set*); // Frees the contents but not the object. Other fields than set->owner are cleared.
 
 void		nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // coordinates of the index
 nct_att*	nct_get_varatt(const nct_var* var, const char* name);

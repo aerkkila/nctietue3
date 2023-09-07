@@ -252,6 +252,15 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
     return var;
 }
 
+nct_set* nct_clear(nct_set* set) {
+    int owner = set->owner;
+    set->owner = 0; // keep the nct_set object allocated
+    nct_free1(set);
+    *set = (nct_set){0};
+    set->owner = owner;
+    return set;
+}
+
 void nct_close_nc(nct_set* set) {
     ncfunk(nc_close, set->ncid);
     set->ncid = 0;
