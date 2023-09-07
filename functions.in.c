@@ -140,17 +140,16 @@ long long nct_min_integer_@nctype(const nct_var* var) {
     return nct_min_anyd_@nctype(var).a.form;
 }
 
-void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
+void* nct_minmax_at_@nctype(const nct_var* var, long start, long end, void* vresult) {
     ctype maxval, minval, *result=vresult;
-    long len = var->endpos - var->startpos;
     /* using the first value would not work with nan-values */
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     maxval = -INFINITY;
     minval = INFINITY;
-    for(int i=0; i<len; i++)
+    for(int i=start; i<end; i++)
 #else
-    maxval = minval = ((ctype*)var->data)[0];
-    for(int i=1; i<len; i++)
+    maxval = minval = ((ctype*)var->data)[start];
+    for(int i=start+1; i<end; i++)
 #endif
 	if(maxval < ((ctype*)var->data)[i])
 	    maxval = ((ctype*)var->data)[i];
@@ -161,22 +160,21 @@ void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
     return result;
 }
 
-void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult) {
+void* nct_minmax_nan_at_@nctype(const nct_var* var, long nanval_long, long start, long end, void* vresult) {
     ctype maxval, minval, *result=vresult, nanval=nanval_long;
-    long len = var->endpos - var->startpos;
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
 #define _my_isnan(a) (!((a) == (a)) || (a) == nanval)
 #else
 #define _my_isnan(a) ((a) == nanval)
 #endif
-    int i=0;
-    for (; i<len && _my_isnan(((ctype*)var->data)[i]); i++);
-    if (i == len) {
+    int i=start;
+    for (; i<end && _my_isnan(((ctype*)var->data)[i]); i++);
+    if (i == end) {
 	result[0] = result[1] = nanval;
 	return result;
     }
     maxval = minval = ((ctype*)var->data)[i];
-    for(; i<len; i++) {
+    for(; i<end; i++) {
 	if (_my_isnan(((ctype*)var->data)[i]))
 	    continue;
 	if(maxval < ((ctype*)var->data)[i])
@@ -188,6 +186,14 @@ void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult
     result[1] = maxval;
     return result;
 #undef _my_isnan
+}
+
+void* nct_minmax_@nctype(const nct_var* var, void* vresult) {
+    return nct_minmax_at_@nctype(var, 0, var->endpos - var->startpos, vresult);
+}
+
+void* nct_minmax_nan_@nctype(const nct_var* var, long nanval_long, void* vresult) {
+    return nct_minmax_nan_at_@nctype(var, nanval_long, 0, var->endpos - var->startpos, vresult);
 }
 
 nct_var* nct_mean_first_@nctype(nct_var* var) {
