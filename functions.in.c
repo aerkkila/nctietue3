@@ -11,11 +11,11 @@ static void nct_print_datum_@nctype(const void* vdatum) {
     ctype datum = *(ctype*)vdatum;
 #if __nctype__ == NC_FLOAT || __nctype__ == NC_DOUBLE
     if (datum > 0) {
-	if (datum < 1e-5 || datum >= 1e7) {
+	if (datum < 1e-5 || datum >= 1e6) {
 	    printf("%e", datum);
 	    return; }
     }
-    else if (datum < 0 && (datum > -1e-5 || datum <= -1e7)) {
+    else if (datum < 0 && (datum > -1e-5 || datum <= -1e6)) {
 	    printf("%e", datum);
 	    return; }
 #endif
