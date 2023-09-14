@@ -370,6 +370,7 @@ void		nct_push_integer(nct_var*, long long);
 /* Print functions load the necessary data.
    Hence, nct_set* or nct_var* is not constant. */
 void nct_print_datum(nc_type, const void*);
+void nct_print_datum_at(nc_type, const void* vdatum, long pos);
 void nct_print_att(nct_att*, const char* indent);
 void nct_print_var(nct_var*, const char* indent);
 void nct_print_dim(nct_var*, const char* indent);
