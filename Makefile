@@ -9,6 +9,12 @@ ifdef have_proj
 	extra_dependencies += extra/nctproj.[ch]
 endif
 
+ifdef have_lz4
+	macros += -DHAVE_LZ4
+	libraries += -llz4
+	extra_dependencies += extra/lz4.[ch]
+endif
+
 all: libnctietue3.so
 
 nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h transpose.c config.mk $(extra_dependencies)

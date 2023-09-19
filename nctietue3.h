@@ -2,10 +2,10 @@
 #define __NCTIETUE__
 
 #include <netcdf.h>
-#include <time.h>
-#include <stdio.h>
-#include <stddef.h>
-#include <regex.h> // regmatch_t
+#include <time.h>	// time_t
+#include <stdio.h>	// stderr
+#include <stddef.h>	// NULL
+#include <regex.h>	// regmatch_t
 
 typedef struct nct_set nct_set;
 typedef struct nct_var nct_var;
@@ -48,15 +48,6 @@ extern FILE* nct_stderr;
 	}					\
     } while(0)
 
-#define ncfunk_open(name, access, idptr)			\
-    do {							\
-	if((nct_ncret = nc_open(name, access, idptr))) {	\
-	    ncerror(nct_ncret);					\
-	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", name);	\
-	    nct_other_error;					\
-	}							\
-    } while(0)
-
 extern int nct_ncret;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
@@ -73,7 +64,7 @@ extern const char* nct_default_color;
 enum {nct_auto, nct_interrupt, nct_pass};
 extern int nct_error_action;
 
-/* Set this as nonzero to print progress in some functions. Currently only in nct_load.
+/* Set this as nonzero to print progress in some functions such as nct_load.
    To disable error messages, use nct_stderr instead of this. */
 extern int nct_verbose;
 enum {nct_verbose_overwrite=1, nct_verbose_newline};
@@ -129,7 +120,7 @@ struct nct_var {
     long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
     nc_type	dtype;
     int		not_freeable;
-    unsigned	char* nusers; // the first user is not counted
+    unsigned char* nusers; // the first user is not counted
     void*	data;
     unsigned	rules; // a bitmask of rules which are in use
     nct_rule	rule[nct_r_nrules];
@@ -389,6 +380,12 @@ unsigned long long*	nct_range_NC_UINT64(unsigned long long i0, unsigned long lon
 double*			nct_range_NC_DOUBLE(double i0, double i1, double gap);
 float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
 
+struct nct_readmem_t {
+    const char* name;	// name of the file, used mostly in error messages
+    size_t size;	// size of the file in bytes
+    void* content;	// content of the file
+};
+
 /* How nct_read_nc behaves:
  * nct_rlazy:
  *	Data is not loaded nor memory allocated.
@@ -405,13 +402,20 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  *	Ignore attributes.
  *
  * nct_rkeep:
+ *	FIXME: Works properly only if added to global nct_readflags.
  *	Read files are kept open. This can lead to Netcdf error: too many open files,
  *	but avoids reopening them on nct_load if nct_rlazy or nct_rcoord is used.
  *	nct_free or nct_close_nc will close the file
  * default:
  *	Files are closed after reading the metadata and reopened on nct_load.
+ *
+ * nct_rmem:
+ *	The 'const void* file' variable is a pointer to struct nct_readmem_t.
+ *	Cannot be used without nct_rkeep, which will be automatically added to readflags.
+ * default:
+ *	The 'const void* file' variable is the name of the file to be read.
  */
-enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3};
+enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.
@@ -438,8 +442,8 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type typ
 #define  nct_read_nc_gd(set, name) nct_read_ncf_gd(set, name, nct_readflags)
 #define  nct_readm_ncf(set, name, flags) nct_set set; nct_read_ncf_gd(&set, name, flags)
 #define  nct_readm_nc(set, name) nct_readm_ncf(set, name, nct_readflags)
-nct_set* nct_read_ncf(const char*, int flags);
-nct_set* nct_read_ncf_gd(nct_set*, const char*, int flags);
+nct_set* nct_read_ncf(const void* file, int readflags);
+nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
 /* See comment on nct__get_filenames. */
@@ -587,5 +591,12 @@ char* nct__get_filenames_(
    n is optional: if -1 if given, n is calculated.
    other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given. */
 char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other);
+
+/* Defined only if compiled with have_lz4 */
+/* In: compressed lz4 frame. Out: decompressed data, allocated in the function. */
+void* nct__lz4_decompress(const void* compressed, size_t size_compressed, size_t* size_uncompressed_out);
+/* Reads an lz4 file and and returns its content decompressed with nct__lz4_decompress */
+void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed);
+nct_set* nct_read_nc_lz4(const char* filename);
 
 #endif

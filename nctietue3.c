@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include "nctietue3.h"
+#include <netcdf_mem.h> // must be after netcdf.h from nctietue3.h
 /* for multifile read using regex */
 #include <regex.h>
 #include <dirent.h>
@@ -16,6 +17,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 
 #define setrule(a, r) ((a)->rules |= 1<<(r))
 #define hasrule(a, r) ((a)->rules & 1<<(r))
+#define rmrule(a, r)  ((a)->rules &= ~(1<<(r)))
 
 #define startpass			\
     int __nct_err = nct_error_action;	\
@@ -66,6 +68,15 @@ static const char* const nct_typenames[] = { ALL_TYPES };
 static const char* const nct_timeunits[] = { TIMEUNITS };
 #undef TIMEUNIT
 
+#define ncfunk_open(name, access, idptr)			\
+    do {							\
+	if((nct_ncret = nc_open(name, access, idptr))) {	\
+	    ncerror(nct_ncret);					\
+	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", name);	\
+	    nct_other_error;					\
+	}							\
+    } while(0)
+
 int nct_nlinked_vars=0;
 #define nct_nlinked_max 256
 unsigned char nct_nusers[nct_nlinked_max] = {0};
@@ -83,8 +94,8 @@ const char* nct_default_color = "\033[0m";
 
 static void     _nct_free_var(nct_var*);
 static void	_nct_free_att(nct_att*);
-static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int flags);
-static nct_set* nct_read_ncf_lazy(const char* filename, int flags);
+static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* filename, int flags);
+static nct_set* nct_read_ncf_lazy(const void* filename, int flags);
 static nct_set* nct_after_lazyread(nct_set* s, int flags);
 
 void* nct_getfun[] = {
@@ -133,12 +144,16 @@ void* nct_getfun_1[] = {
 };
 
 #include "internals.h"
+#include "transpose.c"
+
 #ifdef HAVE_PROJ
 #include "extra/nctproj.h"
 #include "extra/nctproj.c"
 #endif
 
-#include "transpose.c"
+#ifdef HAVE_LZ4
+#include "extra/lz4.c"
+#endif
 
 static void verbose_line_ending() {
     if (nct_verbose == nct_verbose_overwrite)
@@ -1197,24 +1212,21 @@ void nct_print(nct_set* set) {
 }
 
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {
-    if (flags & nct_rlazy) {
-	perhaps_close_the_file(s);
-	return s;
-    }
     unsigned old = nct_readflags;
+    if (flags & nct_rlazy)
+	goto end;
     nct_readflags = flags | nct_rkeep; // don't close and reopen on each variable
     if (flags & nct_rcoord) {
 	int ndims = s->ndims;
 	for(int i=0; i<ndims; i++)
 	    if (nct_iscoord(s->dims[i]))
 		nct_load(s->dims[i]);
-	nct_readflags = old;
-	perhaps_close_the_file(s);
-	return s;
+	goto end;
     }
-    int nvars = s->nvars;
-    for(int i=0; i<nvars; i++)
+    for(int i=s->nvars-1; i>=0; i--)
 	nct_load(s->vars[i]);
+
+end:
     nct_readflags = old;
     perhaps_close_the_file(s);
     return s;
@@ -1260,15 +1272,30 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nct
     return ret;
 }
 
-static nct_set* nct_read_ncf_lazy(const char* filename, int flags) {
+static nct_set* nct_read_ncf_lazy(const void* filename, int flags) {
     nct_set* s = malloc(sizeof(nct_set));
     nct_read_ncf_lazy_gd(s, filename, flags) -> owner=1;
     return s;
 }
 
-static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int flags) {
+static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags) {
     int ncid, ndims, nvars;
-    ncfunk_open(filename, NC_NOWRITE, &ncid);
+    const char* filename;
+    if (flags & nct_rmem) {
+	const struct nct_readmem_t* params = vfile;
+	filename = params->name;
+	nct_readflags |= nct_rkeep;
+	flags |= nct_rkeep;
+	if ((nct_ncret = nc_open_mem(params->name, NC_NOWRITE, params->size, params->content, &ncid))) {
+	    ncerror(nct_ncret);
+	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", params->name);
+	    nct_other_error;
+	}
+    }
+    else {
+	filename = vfile;
+	ncfunk_open(filename, NC_NOWRITE, &ncid);
+    }
     ncfunk(nc_inq_ndims, ncid, &ndims);
     ncfunk(nc_inq_nvars, ncid, &nvars);
     *dest = (nct_set){
@@ -1279,6 +1306,7 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
 	.varcapacity = nvars + 3,
 	.filename = strdup(filename),
     };
+
     dest->dims = calloc(dest->dimcapacity, sizeof(void*));
     dest->vars = calloc(dest->varcapacity, sizeof(void*));
     for(int i=0; i<nvars; i++)
@@ -1309,13 +1337,13 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const char* filename, int fl
     return dest;
 }
 
-nct_set* nct_read_ncf(const char* filename, int flags) {
-    nct_set* s = nct_read_ncf_lazy(filename, flags);
+nct_set* nct_read_ncf(const void* vfile, int flags) {
+    nct_set* s = nct_read_ncf_lazy(vfile, flags);
     return nct_after_lazyread(s, flags);
 }
 
-nct_set* nct_read_ncf_gd(nct_set* s, const char* filename, int flags) {
-    nct_read_ncf_lazy_gd(s, filename, flags);
+nct_set* nct_read_ncf_gd(nct_set* s, const void* vfile, int flags) {
+    nct_read_ncf_lazy_gd(s, vfile, flags);
     return nct_after_lazyread(s, flags);
 }
 

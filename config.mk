@@ -3,6 +3,10 @@
 # Comment this out if you don't want that.
 have_proj = 1
 
+# Reading lz4 compressed files (e.g. file.nc.lz4) is supported with lz4 library
+# Comment this out if you don't want that.
+have_lz4 = 1
+
 CFLAGS = -Wall -g -fPIC -O3
 CC = gcc
 
