@@ -2,3 +2,5 @@ This library is a wrapper around the netcdf library allowing reading, preprocess
 Creating new netcdf files is also possible but it depends on the situation whether this library makes it any easier compared to netcdf library.
 
 For documentation, see nctietue3.h and examples.
+
+See config.mk to disable optional dependencies.
