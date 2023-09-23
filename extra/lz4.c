@@ -91,17 +91,14 @@ void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed) {
     return result;
 }
 
-nct_set* nct_read_nc_lz4(const char* filename) {
-    size_t contentsize;
-    void* content = nct__lz4_getcontent(filename, &contentsize);
+nct_set* nct_read_ncf_lz4_gd(nct_set* dest, const char* filename, int flags) {
     struct nct_readmem_t arg = {
 	.name = filename,
-	.size = contentsize,
-	.content = content
+	.getcontent = nct__lz4_getcontent,
     };
-    int oldflags = nct_readflags;
-    nct_set* set = nct_read_ncf(&arg, nct_rmem|nct_ratt);
-    nct_readflags = oldflags;
-    free(content);
-    return set;
+    return nct_read_ncf_gd(dest, &arg, flags|nct_rmem);
+}
+
+nct_set* nct_read_ncf_lz4(const char* filename, int flags) {
+    return nct_read_ncf_lz4_gd(calloc(1, sizeof(nct_set)), filename, flags);
 }

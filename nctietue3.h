@@ -48,6 +48,10 @@ extern FILE* nct_stderr;
 	}					\
     } while(0)
 
+/* bits to use in freeable or owner flags, e.g. (nct_att(a)).freeable = nct_ref_content */
+#define nct_ref_content	(1<<0)
+#define nct_ref_name	(1<<1)
+
 extern int nct_ncret;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
@@ -88,6 +92,8 @@ union nct_any {
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
     nct_r_start, nct_r_concat, nct_r_list, nct_r_stream, nct_r_nrules,
+    /* The following rules are only boolean in bitmask, not in the array of rules. */
+    nct_r_mem,
 } nct_rule_e;
 typedef struct {
     nct_any arg;
@@ -136,8 +142,9 @@ struct nct_set {
     int		natts, attcapacity;
     nct_att*	atts;
     int		ncid, owner;
-    char*	filename;
-    unsigned	rules; // a bitmask of rules which are in use
+    /* private */
+    void*	fileinfo;	// either char* filename or struct nct_readmem_t*
+    unsigned	rules;		// a bitmask of rules which are in use
 };
 
 struct nct_anyd {
@@ -146,7 +153,7 @@ struct nct_anyd {
 };
 
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
-#define nct_loadable(var) (var->ncid>=0 && ((var)->super->ncid > 0 || (var)->super->filename))
+#define nct_loadable(var) (var->ncid>=0 && ((var)->super->ncid > 0 || nct_get_filename(var->super)))
 
 #define nct_varid(var) ((var)->id_var-1)
 #define nct_dimid(var) ((var)->id_dim-1)
@@ -257,6 +264,7 @@ int		nct_get_varid(const nct_set* restrict, const char* restrict);
 int		nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t		nct_get_len_from(const nct_var*, int startdim);
 FILE*		nct_get_stream(const nct_var*);
+const char*	nct_get_filename(const nct_set*);
 double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
 double		nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
 double		nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
@@ -380,10 +388,14 @@ unsigned long long*	nct_range_NC_UINT64(unsigned long long i0, unsigned long lon
 double*			nct_range_NC_DOUBLE(double i0, double i1, double gap);
 float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
 
+/* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
+   It could be for example nct__lz4_getcontent. */
 struct nct_readmem_t {
-    const char* name;	// name of the file, used mostly in error messages
+    const char* name;	// Not strictly needed. Const is discarded in nct_free if (owner & nct_ref_name).
     size_t size;	// size of the file in bytes
     void* content;	// content of the file
+    unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
+    void* (*getcontent)(const char* filename, size_t* size_out);
 };
 
 /* How nct_read_nc behaves:
@@ -397,7 +409,7 @@ struct nct_readmem_t {
  *      Everything is read at once.
  *
  * nct_ratt:
- *	Read attributes.
+ *	Read attributes. Might be the default in future.
  * default:
  *	Ignore attributes.
  *
@@ -407,15 +419,27 @@ struct nct_readmem_t {
  *	but avoids reopening them on nct_load if nct_rlazy or nct_rcoord is used.
  *	nct_free or nct_close_nc will close the file
  * default:
- *	Files are closed after reading the metadata and reopened on nct_load.
+ *	Files are closed after the first read call and reopened on nct_load.
  *
  * nct_rmem:
  *	The 'const void* file' variable is a pointer to struct nct_readmem_t.
  *	Cannot be used without nct_rkeep, which will be automatically added to readflags.
  * default:
  *	The 'const void* file' variable is the name of the file to be read.
+ *
+ * nct_rkeepmem:
+ *	FIXME: Works properly only if added to global nct_readflags.
+ * 	Meaningful only with nct_rmem.
+ * 	Read memfiles are kept in memory. See also nct_readmem_t.owner.
+ * default:
+ * 	The file content is freed when the netcdf file is closed and reloaded when the file is reopened.
+ *
+ * nct_rnetcdf:
+ * 	Filetype is netcdf.
+ * default:
+ * 	Other filetype can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
  */
-enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4};
+enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.
@@ -597,6 +621,8 @@ char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2],
 void* nct__lz4_decompress(const void* compressed, size_t size_compressed, size_t* size_uncompressed_out);
 /* Reads an lz4 file and and returns its content decompressed with nct__lz4_decompress */
 void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed);
-nct_set* nct_read_nc_lz4(const char* filename);
+/* These are used automatically if file ending is .lz4. */
+nct_set* nct_read_ncf_lz4(const char* filename, int flags);
+nct_set* nct_read_ncf_lz4_gd(nct_set* dest, const char* filename, int flags);
 
 #endif

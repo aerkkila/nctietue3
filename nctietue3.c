@@ -15,6 +15,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 
 #define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
 
+/* uses private nct_set.rules */
 #define setrule(a, r) ((a)->rules |= 1<<(r))
 #define hasrule(a, r) ((a)->rules & 1<<(r))
 #define rmrule(a, r)  ((a)->rules &= ~(1<<(r)))
@@ -72,7 +73,7 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
     do {							\
 	if((nct_ncret = nc_open(name, access, idptr))) {	\
 	    ncerror(nct_ncret);					\
-	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", name);	\
+	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", (char*)name);	\
 	    nct_other_error;					\
 	}							\
     } while(0)
@@ -416,12 +417,12 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
     if(time0_anyd.d < 0)
 	return NULL;
     sec0 = mktime(nct_localtime(1, time0_anyd)) - mktime(nct_localtime(0, time0_anyd)); // days -> 86400 etc.
-    if(att->freeable & 1)
+    if(att->freeable & nct_ref_content)
 	free(att->value);
 
     /* change the attribute */
     att->value = strdup(units);
-    att->freeable |= 1;
+    att->freeable |= nct_ref_content;
     nct_anyd time1_anyd = nct_mktime0(var, NULL); // different result than time0_anyd, since att has been changed
     if(time1_anyd.d < 0)
 	return NULL;
@@ -472,7 +473,7 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
 	.value	= malloc(len),
 	.dtype	= src->dtype,
 	.len	= src->len,
-	.freeable = 3,
+	.freeable = nct_ref_content | nct_ref_name,
     };
     memcpy(att.value, src->value, len);
     return nct_add_varatt(var, &att);
@@ -748,9 +749,9 @@ nct_var* nct_lastvar(const nct_set* set) {
 static void _nct_free_att(nct_att* att) {
     if(att->dtype == NC_STRING)
 	nc_free_string(att->len, att->value);
-    if(att->freeable & 1)
+    if(att->freeable & nct_ref_content)
 	free(att->value);
-    if(att->freeable & 2)
+    if(att->freeable & nct_ref_name)
 	free(att->name);
     att->freeable = 0;
 }
@@ -781,6 +782,21 @@ void _nct_free(int _, ...) {
     while((int)(addr = va_arg(args, intptr_t)) != -1)
 	nct_free1((nct_set*)addr);
     va_end(args);
+}
+
+/* uses private nct_set.fileinfo */
+static void _nct_free_fileinfo(nct_set* set) {
+    if (hasrule(set, nct_r_mem)) {
+	struct nct_readmem_t* fileinfo = set->fileinfo;
+	if (fileinfo->owner & nct_ref_content)
+	    free(fileinfo->content);
+	if (fileinfo->owner & nct_ref_name)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+	    free((char*)fileinfo->name);
+#pragma GCC diagnostic pop
+    }
+    set->fileinfo = (free(set->fileinfo), NULL);
 }
 
 void nct_free1(nct_set* set) {
@@ -814,7 +830,7 @@ void nct_free1(nct_set* set) {
 	set->ncid = 0;
     }
     endpass;
-    free(set->filename);
+    _nct_free_fileinfo(set);
     if hasrule(set, nct_r_list) {
 	nct_set* ptr = set;
 	nct_set nullset = {0};
@@ -983,20 +999,63 @@ int nct_link_data(nct_var* dest, nct_var* src) {
     return 0;
 }
 
-static void perhaps_close_the_file(nct_set* set) {
-    if (set->ncid > 0 && !(nct_readflags & nct_rkeep))
-	nct_close_nc(set);
+static int nct_open_mem(struct nct_readmem_t*);
+
+/* No need to call outside perhaps_close_the_file */
+static void perhaps_free_the_content(struct nct_readmem_t* info) {
+    if (!(nct_readflags & nct_rkeepmem) && info->owner & nct_ref_content)
+	info->content = (free(info->content), NULL);
 }
 
+/* uses private nct_set.fileinfo */
+static void perhaps_close_the_file(nct_set* set) {
+    if (set->ncid <= 0 || nct_readflags & nct_rkeep)
+	return;
+    nct_close_nc(set);
+    if (hasrule(set, nct_r_mem))
+	perhaps_free_the_content(set->fileinfo);
+}
+
+/* uses private nct_set.fileinfo */
 static void perhaps_open_the_file(nct_var* var) {
-    if (var->super->ncid <= 0 && var->super->filename)
-	ncfunk_open(var->super->filename, NC_NOWRITE, &var->super->ncid);
+    if (var->super->ncid > 0 || !var->super->fileinfo)
+	return;
+    if (hasrule(var->super, nct_r_mem)) {
+	struct nct_readmem_t* info = var->super->fileinfo;
+	var->super->ncid = nct_open_mem(info);
+    }
+    else
+	ncfunk_open(var->super->fileinfo, NC_NOWRITE, &var->super->ncid);
+}
+
+/* No need to call outside nct_open_mem. */
+static void perhaps_load_the_content(struct nct_readmem_t* info) {
+    if (info->content)
+	return;
+    info->content = info->getcontent(info->name, &info->size);
+    info->owner |= nct_ref_content;
+}
+
+static int nct_open_mem(struct nct_readmem_t* params) {
+    int ncid;
+    perhaps_load_the_content(params);
+    if ((nct_ncret = nc_open_mem(params->name, NC_NOWRITE, params->size, params->content, &ncid))) {
+	ncerror(nct_ncret);
+	fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", params->name);
+	nct_other_error;
+    }
+    return ncid;
 }
 
 #include "load_data.h" // nct_load_as
 
 FILE* nct_get_stream(const nct_var* var) {
     return hasrule(var, nct_r_stream) ? var->rule[nct_r_stream].arg.v : NULL;
+}
+
+/* uses private nct_set.fileinfo */
+const char* nct_get_filename(const nct_set* set) {
+    return hasrule(set, nct_r_mem) ? ((struct nct_readmem_t*)set->fileinfo)->name : set->fileinfo;
 }
 
 nct_var* nct_load_stream(nct_var* var, size_t len) {
@@ -1197,8 +1256,9 @@ void nct_print_dim(nct_var* var, const char* indent) {
 }
 
 void nct_print(nct_set* set) {
-    if (set->filename)
-	printf("%s:\n", set->filename);
+    const char* filename = nct_get_filename(set);
+    if (filename)
+	printf("%s:\n", filename);
     printf("%s%i variables, %i dimensions%s\n", nct_varset_color, set->nvars, set->ndims, nct_default_color);
     int n = set->ndims;
     for(int i=0; i<n; i++) {
@@ -1278,24 +1338,35 @@ static nct_set* nct_read_ncf_lazy(const void* filename, int flags) {
     return s;
 }
 
+#define matches(name, len, type) (len >= sizeof(type)-1  &&  !strcmp(name+len-sizeof(type)+1, type))
+static nct_set* _read_unknown_format(nct_set* dest, const char* name, int flags) {
+#ifdef HAVE_LZ4
+    static const char lz4[] = ".lz4";
+    int len = strlen(name);
+
+    if matches(name, len, lz4)
+	return nct_read_ncf_lz4_gd(dest, name, flags);
+#endif
+    /* Go back to the core reading function with the information that we are reading netcdf. */
+    return nct_read_ncf_lazy_gd(dest, name, flags|nct_rnetcdf);
+}
+#undef matches
+
+/* Uses private nct_set.fileinfo. This is the core reading function. */
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags) {
     int ncid, ndims, nvars;
-    const char* filename;
+    void* fileinfo;
     if (flags & nct_rmem) {
-	const struct nct_readmem_t* params = vfile;
-	filename = params->name;
-	nct_readflags |= nct_rkeep;
-	flags |= nct_rkeep;
-	if ((nct_ncret = nc_open_mem(params->name, NC_NOWRITE, params->size, params->content, &ncid))) {
-	    ncerror(nct_ncret);
-	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", params->name);
-	    nct_other_error;
-	}
+	fileinfo = malloc(sizeof(struct nct_readmem_t));
+	memcpy(fileinfo, vfile, sizeof(struct nct_readmem_t));
+	ncid = nct_open_mem(fileinfo);
     }
-    else {
-	filename = vfile;
-	ncfunk_open(filename, NC_NOWRITE, &ncid);
+    else if (flags & nct_rnetcdf) {
+	fileinfo = strdup(vfile);
+	ncfunk_open(fileinfo, NC_NOWRITE, &ncid);
     }
+    else // If another filetype isn't recognized, calls this function again with flags|nct_rnetcdf.
+	return _read_unknown_format(dest, vfile, flags);
     ncfunk(nc_inq_ndims, ncid, &ndims);
     ncfunk(nc_inq_nvars, ncid, &nvars);
     *dest = (nct_set){
@@ -1304,8 +1375,11 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
 	.nvars = nvars,
 	.dimcapacity = ndims + 1,
 	.varcapacity = nvars + 3,
-	.filename = strdup(filename),
+	.fileinfo = fileinfo,
     };
+
+    if (flags & nct_rmem)
+	setrule(dest, nct_r_mem);
 
     dest->dims = calloc(dest->dimcapacity, sizeof(void*));
     dest->vars = calloc(dest->varcapacity, sizeof(void*));
@@ -1579,7 +1653,7 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 	    continue;
 	int load = 0;
 	if (!v->data) {
-	    if (v->super->ncid > 0 || v->super->filename)
+	    if (nct_loadable(v))
 		load = 1;
 	    else
 		continue;
