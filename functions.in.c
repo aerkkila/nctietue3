@@ -103,6 +103,63 @@ long long nct_getatt_integer_@nctype(const nct_att* att, size_t ind) {
     return ((ctype*)att->value)[ind];
 }
 
+/* Different implementation might be more optimal for interpolating fast changing dimensions.
+   This is probably better for slow changing dimensions. */
+
+void* nct_get_interpolated_@nctype(const nct_var* var, int idim, const nct_var* todim) {
+    size_t newlen = var->len / nct_get_vardim(var, idim)->len * todim->len;
+    const nct_var* frdim = nct_get_vardim(var, idim);
+    size_t frdimlen = frdim->len;
+    size_t todimlen = todim->len;
+    @ctype* new = malloc(newlen * sizeof(@ctype));
+    if (!new) {
+	nct_puterror("malloc %zu*%zu failed: %s\n", newlen, sizeof(@ctype), strerror(errno));
+	nct_other_error;
+    }
+
+    /* For example, when interpolating e2 among dims e[0-4], e0 changing slowest:
+       naffected   = |e4|*|e3|
+       oldcyclelen = |e4|*|e3|*|e2(old)|
+       nrepeat	   = |e0|*|e1| */
+    size_t naffected = nct_get_len_from(var, idim+1);
+    size_t oldcyclelen = naffected * frdimlen;
+    size_t nrepeat = var->len / oldcyclelen,
+	   inew = 0;
+
+    for (int rep=0; rep<nrepeat; rep++) {
+	for (int inewdim=0; inewdim<todimlen; inewdim++) {
+	    double targetcoord = nct_get_floating(todim, inewdim);
+	    int ihigher = nct_find_sorted(frdim, targetcoord, 1);
+
+	    if (ihigher >= frdimlen) {
+		size_t offset = rep*oldcyclelen + (frdimlen-1)*naffected;
+		for (int i=0; i<naffected; i++)
+		    new[inew++] = ((@ctype*)var->data)[offset+i];
+		continue;
+	    }
+	    else if (ihigher <= 0) {
+		size_t offset = rep*oldcyclelen;
+		for (int i=0; i<naffected; i++)
+		    new[inew++] = ((@ctype*)var->data)[offset+i];
+		continue;
+	    }
+
+	    double b = nct_get_floating(frdim, ihigher);
+	    double a = nct_get_floating(frdim, ihigher-1);
+	    double rel = (targetcoord - a) / (b - a);
+
+	    size_t offset = rep*oldcyclelen + (ihigher-1)*naffected;
+	    for (int i=0; i<naffected; i++) {
+		@ctype b = ((@ctype*)var->data)[offset+i+naffected];
+		@ctype a  = ((@ctype*)var->data)[offset+i];
+		new[inew++] = a + (b-a)*rel;
+	    }
+	}
+    }
+    
+    return new;
+}
+
 nct_anyd nct_max_anyd_@nctype(const nct_var* var) {
     long len = var->endpos - var->startpos;
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE

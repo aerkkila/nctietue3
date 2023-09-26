@@ -706,7 +706,12 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right) {
 	if (sem[1]-sem[0] <= 1) {
 	    double v0 = getfun(var, sem[0]),
 		   v1 = getfun(var, sem[1]);
-	    return value<v0 ? sem[0] : value<v1 ? sem[1] : value>v1 ? sem[1]+1 : sem[1]+!!right;
+	    return
+		value<v0  ? sem[0] :
+		value==v0 ? sem[0]+!!right :
+		value<v1  ? sem[1] :
+		value==v1 ? sem[1]+!!right :
+		sem[1]+1;
 	}
 	double try = getfun(var, sem[2]);
 	sem[try>value] = sem[2]; // if (try>value) end = mid; else start = mid;
@@ -942,6 +947,33 @@ long long nct_getl_integer(const nct_var* var, size_t ind) {
     nct_ncget_1_t fun = nct_getfun_1[NC_INT64];
     fun(var->super->ncid, var->ncid, coords, &result);
     return result;
+}
+
+nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_possible) {
+    nct_perhaps_load_partially(var, 0, var->len);
+    void* newdata = nct_get_interpolated(var, idim, todim);
+
+    if (!inplace_if_possible || todim->super != var->super)
+	var = nct_ensure_unique_name(nct_copy_var(todim->super, var, 1));
+    nct_unlink_data(var);
+    var->data = newdata;
+    var->dimids[idim] = nct_dimid(todim);
+
+    var->len = nct_get_len_from(var, 0);
+    var->startpos = 0;
+    var->endpos = var->len;
+    return var;
+}
+
+nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name, int freeable_name) {
+    double v0 = nct_get_floating(coord, 0);
+    double v1 = nct_get_floating_last(coord, 1);
+    nct_var* new = nct_add_dim(coord->super, round(v1-v0+1), new_name);
+    new->freeable_name = freeable_name;
+    nct_put_interval(nct_dim2coord(new, NULL, NC_INT), v0, gap);
+    for(int a=0; a<coord->natts; a++)
+	nct_copy_att(new, coord->atts+a);
+    return new;
 }
 
 int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit) {

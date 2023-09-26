@@ -198,6 +198,8 @@ int nct_create_nc_def(nct_set* src, const char* name);
 int nct_createcoords_nc_def(nct_set* src, const char* name);
 
 nct_att* nct_copy_att(nct_var*, const nct_att*);
+/* Makes a new coordinate variable with the same bounds as in coord but with different gap and therefore also length. */
+nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name, int freeable_name);
 nct_var* nct_copy_var(nct_set*, nct_var*, int link); // data are copied, if link is false
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
@@ -269,6 +271,14 @@ double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls eit
 double		nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
 double		nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
 long long	nct_getl_integer(const nct_var*, size_t);  // If the value has to be loaded.
+
+/* Interpolate linearily.
+   If extrapolated, the last value is repeated, but don't trust on this:
+   In future, FillValue might be used, if available.
+   var->dimids[idim] is replaced with tocoord.
+   The given variable if modified, if inplace_if_possible and tocoord->super == var->super
+   otherwise a new variable is generated into tocoord->super. */
+nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_if_possible);
 
 /* Reads attribute "units" from $var
    and fills timetm according to that
@@ -561,6 +571,7 @@ double    nct_get_floating_last(const nct_var*, size_t ind);	// returns var->dat
 long long nct_get_integer_last(const nct_var*, size_t ind);	// returns var->data[var->len-ind]
 double    nct_getatt_floating(const nct_att*, size_t);		// like above but read from an attribute
 long long nct_getatt_integer(const nct_att*, size_t);		// like above but read from an attribute
+void*     nct_get_interpolated(const nct_var*, int idim, const nct_var* todim); // used in nct_interpolate
 double    nct_max_floating(const nct_var*);
 long long nct_max_integer(const nct_var*);
 nct_anyd  nct_max_anyd(const nct_var*);				// returns (nct_anyd){.d=argmax, .type=max}

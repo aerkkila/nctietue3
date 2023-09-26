@@ -1,6 +1,5 @@
 #!/bin/env perl
 use warnings;
-$fname0   = 'functions.in.c';
 @nctypes  = ('NC_BYTE', 'NC_UBYTE', 'NC_CHAR', 'NC_SHORT', 'NC_USHORT', 'NC_INT', 'NC_UINT',
 	     'NC_INT64', 'NC_UINT64', 'NC_FLOAT', 'NC_DOUBLE');
 @formats  = ('hhi', 'hhu', 'c', 'hi', 'hu', 'i', 'u', 'lli', 'llu', 'f', 'lf');
@@ -8,8 +7,6 @@ $fname0   = 'functions.in.c';
              'long long', 'long long unsigned', 'float', 'double');
 @uctypes  = ('unsigned char', 'unsigned char', 'unsigned char', 'unsigned short', 'unsigned short', 'unsigned', 'unsigned',
              'long long unsigned', 'long long unsigned', 'float', 'double');
-
-$quiet = grep(/^-q$/, @ARGV);
 
 sub make_wrapper_function {
     ($type, $name, $args) = @_;
@@ -51,9 +48,11 @@ sub make_wrapper_function {
     }
 }
 
+$quiet = grep(/^-q$/, @ARGV);
+$fname0   = 'functions.in.c';
 $fname = $fname0;
-$fname =~ s/\.in\.c/.c/;
-open out1, ">$fname"; # functions.c
+$fname =~ s/\.in\.c/.c/; # name.in.c -> name.c
+open out1, ">$fname";
 print out1 "#include <string.h>\n#include <nctietue3.h>\n#include <stdlib.h>\n#include <math.h>\n\n";
 
 open file_in, "<$fname0"; # functions.in.c
