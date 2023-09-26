@@ -53,7 +53,7 @@ $fname0   = 'functions.in.c';
 $fname = $fname0;
 $fname =~ s/\.in\.c/.c/; # name.in.c -> name.c
 open out1, ">$fname";
-print out1 "#include <string.h>\n#include <nctietue3.h>\n#include <stdlib.h>\n#include <math.h>\n\n";
+print out1 "#include <string.h>\n#include \"nctietue3.h\"\n#include <stdlib.h>\n#include <math.h>\n\n";
 
 open file_in, "<$fname0"; # functions.in.c
 

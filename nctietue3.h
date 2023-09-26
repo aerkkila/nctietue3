@@ -52,7 +52,8 @@ extern FILE* nct_stderr;
 #define nct_ref_content	(1<<0)
 #define nct_ref_name	(1<<1)
 
-extern int nct_ncret;
+/* nct_register can be used to return an extra output from a function. */
+extern int nct_ncret, nct_register;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
 
@@ -232,10 +233,11 @@ void nct_finalize(); // calls nc_finalize to free memory used by netcdf
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 
-/* Inefficient if var is not loaded. Meant for light use.
+/* nct_find_sorted (without underscore) is meant to be used as the function,
+   right is an optional argument with default value zero.
    If right, then returns n+1 if index n matches.
-   nct_find_sorted (without underscore) is meant to be used as the function,
-   right is an optional argument with default value zero. */
+   Sets nct_register to 0 (1) if the exact value was (wasn't) found.
+   Returns the index of the value. */
 size_t nct_find_sorted_(const nct_var* var, double value, int right);
 #define _nct_find_sorted(var, value, right, ...) nct_find_sorted_(var, value, right)
 #define nct_find_sorted(...) _nct_find_sorted(__VA_ARGS__, 0)

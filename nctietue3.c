@@ -107,7 +107,7 @@ static void free_fakeheap(void* ptr) {
 	fakeheap_counter--;
 }
 
-int nct_readflags, nct_ncret, nct_error_action, nct_verbose;
+int nct_readflags, nct_ncret, nct_error_action, nct_verbose, nct_register;
 FILE* nct_stderr;
 
 const char* nct_error_color   = "\033[1;91m";
@@ -747,6 +747,7 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right) {
 	if (sem[1]-sem[0] <= 1) {
 	    double v0 = getfun(var, sem[0]),
 		   v1 = getfun(var, sem[1]);
+	    nct_register = !(value==v0 || value==v1);
 	    return
 		value<v0  ? sem[0] :
 		value==v0 ? sem[0]+!!right :
