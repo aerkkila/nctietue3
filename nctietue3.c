@@ -795,9 +795,11 @@ static void _nct_free_fileinfo(nct_set* set) {
 	struct nct_readmem_t* fileinfo = set->fileinfo;
 	if (fileinfo->owner & nct_ref_content)
 	    free(fileinfo->content);
-	if (fileinfo->owner & nct_ref_name)
+	/* If these pragmas come after the if-statement, surrounding only the free-statement,
+	   the if-condition is omitted. Seems like a bug in GCC. */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+	if (fileinfo->owner & nct_ref_name)
 	    free((char*)fileinfo->name);
 #pragma GCC diagnostic pop
     }
