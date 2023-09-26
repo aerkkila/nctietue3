@@ -91,9 +91,9 @@ union nct_any {
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-    nct_r_start, nct_r_concat, nct_r_list, nct_r_stream, nct_r_nrules,
+    nct_r_start, nct_r_concat, nct_r_stream, nct_r_nrules,
     /* The following rules are only boolean in bitmask, not in the array of rules. */
-    nct_r_mem,
+    nct_r_mem, nct_r_list,
 } nct_rule_e;
 typedef struct {
     nct_any arg;
@@ -200,8 +200,7 @@ int nct_createcoords_nc_def(nct_set* src, const char* name);
 nct_att* nct_copy_att(nct_var*, const nct_att*);
 /* Make a new coordinate variable with the same bounds as in coord but different interval and length. */
 nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name);
-/* FIXME: This does not work in some special cases. For example when src has concatenated variables,
-   which are not loaded. The rules are just copied and no indication about shared use is written anywhere. */
+/* nct_load(nct_copy_var(...)) does not work. */
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link); // data are copied, if link is false
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
@@ -290,6 +289,7 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_i
 int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* unit);
 
 int nct_link_data(nct_var*, nct_var*);
+int nct_link_stream(nct_var* dest, nct_var* src);
 
 /* Whether data has to be loaded separately depends on the used readflags: nct_rlazy, nct_rcoord etc.
  * To load data without conversion:
@@ -516,6 +516,10 @@ nct_var* nct_set_length(nct_var* coord, size_t length);
 nct_var* nct_set_start(nct_var* coord, size_t offset);
 nct_var* nct_shorten_length(nct_var* coord, size_t arg); // returns NULL if (arg > coord->len)
 
+/* Causes data to be loaded from the FILE* when nct_load is called.
+   Takes ownership of the FILE*. */
+void nct_set_stream(nct_var*, FILE*);
+
 /* Write the data into new order.
    User must give the same dimensions as is in the variable but reordered. */
 nct_var* nct_transpose_order_ptr(nct_var* var, const int* order);
@@ -559,6 +563,8 @@ nct_var* nct_update_concatlist(nct_var*);
  *	nct_free1(&set);
  */
 void nct_unlink_data(nct_var*);
+
+void nct_unlink_stream(nct_var*);
 
 void nct_write_nc(const nct_set*, const char*);
 

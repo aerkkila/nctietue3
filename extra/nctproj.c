@@ -299,9 +299,7 @@ nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const 
     newvar = nct_add_var(var->super, NULL, var->dtype, strdup(name), var->ndims, dimids);
     newvar->freeable_name = 1;
     nct_ensure_unique_name(newvar);
-    setrule(newvar, nct_r_stream);
-    nct_rule* r = newvar->rule+nct_r_stream;
-    r->arg.v = f;
+    nct_set_stream(newvar, f);
     return newvar;
 }
 

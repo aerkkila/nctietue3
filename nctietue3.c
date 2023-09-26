@@ -79,9 +79,33 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
 	}							\
     } while(0)
 
-int nct_nlinked_vars=0;
+/* This is the fakeheap. We need a small amount of allocatable memory to keep track of linked variables. */
+static int fakeheap_counter=0;
 #define nct_nlinked_max 256
-unsigned char nct_nusers[nct_nlinked_max] = {0};
+static char fakeheap[nct_nlinked_max] = {-1};
+
+static void* calloc_fakeheap() {
+    if (fakeheap_counter < nct_nlinked_max) {
+	char* ptr = fakeheap + fakeheap_counter++;
+	*ptr = 0;
+	return ptr;
+    }
+    for (int i=0; i<nct_nlinked_max; i++)
+	if (fakeheap[i] == -1) {
+	    fakeheap[i] = 0;
+	    return fakeheap+i;
+	}
+    nct_puterror("Maximum number of different links (%i) reached\n", nct_nlinked_max);
+    nct_return_error(NULL);
+}
+
+static void free_fakeheap(void* ptr) {
+    if (!ptr)
+	return;
+    *(char*)ptr = -1;
+    while (fakeheap_counter > 0 && fakeheap[fakeheap_counter-1] == -1)
+	fakeheap_counter--;
+}
 
 int nct_readflags, nct_ncret, nct_error_action, nct_verbose;
 FILE* nct_stderr;
@@ -481,12 +505,6 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
 }
 
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
-    if (anyrule(src, nct_r_stream | nct_r_mem) || (hasrule(src, nct_r_concat) && src->endpos-src->startpos < src->len)) {
-	nct_puterror("The program will likely crash on free or earlier due to copying variable %s (%s).\n"
-		"Set 'nct_error_action = nct_pass' to still continue.\n", src->name, nct_get_filename(src->super));
-	nct_other_error;
-    }
-
     nct_var* var;
     if (nct_iscoord(src)) {
 	int dimid = nct_get_dimid(dest, src->name);
@@ -525,9 +543,17 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     for(int a=0; a<src->natts; a++)
 	nct_copy_att(var, src->atts+a);
 
-    var->rules = src->rules;
-    memcpy(var->rule, src->rule, sizeof(var->rule));
-    rmrule(var, nct_r_concat);
+    /* Let's explicitely copy those rules which we know how to deal with.
+       The rules are after all a wild area which shouldn't exist in the first place. */
+    int known_rules = nct_r_start | nct_r_stream | nct_r_concat;
+    if (anyrule(src, ~known_rules)) {
+	nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n"
+		"Set 'nct_error_action = nct_pass' to still continue.\n", src->name, nct_get_filename(src->super));
+	nct_other_error;
+    }
+    nct_link_stream(var, src); // handles nct_r_stream
+    /* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
+    /* nct_r_start is handled in nct_link_data. */
 
     if (link)
 	nct_link_data(var, src);
@@ -536,6 +562,9 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	var->data = malloc(len*nctypelen(var->dtype));
 	memcpy(var->data, src->data, len*nctypelen(var->dtype));
     }
+    var->startpos = src->startpos;
+    var->endpos = src->endpos;
+
     return var;
 }
 
@@ -782,13 +811,12 @@ static void _nct_free_var(nct_var* var) {
 	for(int i=0; i<var->len; i++)
 	    free(((char**)var->data)[i]);
     nct_unlink_data(var);
+    nct_unlink_stream(var);
     var->capacity = 0;
     if (var->freeable_name)
 	free(var->name);
     if hasrule(var, nct_r_concat)
 	free(var->rule[nct_r_concat].arg.v);
-    if hasrule(var, nct_r_stream)
-	fclose(nct_get_stream(var));
     free(var->stack);
 }
 
@@ -1032,15 +1060,38 @@ int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit)
 }
 
 int nct_link_data(nct_var* dest, nct_var* src) {
-    if(!src->nusers) {
-	if(nct_nlinked_vars >= nct_nlinked_max) {
-	    nct_puterror("Maximum number of different links (%i) reached\n", nct_nlinked_max);
-	    nct_return_error(1); }
-	src->nusers = nct_nusers+nct_nlinked_vars++;
-    }
+    if (!src->nusers)
+	src->nusers = calloc_fakeheap();
     ++*src->nusers;
     dest->data = src->data;
     dest->nusers = src->nusers;
+    dest->rule[nct_r_start].arg.lli = src->rule[nct_r_start].arg.lli;
+    return 0;
+}
+
+char* get_stream_nusers_p(const nct_var* var) {
+    if (var->rule[nct_r_stream].capacity == 0)
+	return NULL;
+    return fakeheap + var->rule[nct_r_stream].n;
+}
+
+void set_stream_nusers_p(nct_var* var, char* ptr) {
+    int n = ptr - fakeheap;
+    var->rule[nct_r_stream].capacity = 1;
+    var->rule[nct_r_stream].n = n;
+}
+
+int nct_link_stream(nct_var* dest, nct_var* src) {
+    if (!hasrule(src, nct_r_stream))
+	return -1;
+    char* nusers = get_stream_nusers_p(src);
+    if (!nusers) {
+	nusers = calloc_fakeheap();
+	set_stream_nusers_p(src, nusers);
+    }
+    ++*nusers;
+    nct_set_stream(dest, nct_get_stream(src));
+    set_stream_nusers_p(dest, nusers);
     return 0;
 }
 
@@ -1674,13 +1725,36 @@ nct_var* nct_set_start(nct_var* dim, size_t arg) {
     return dim;
 }
 
+void nct_set_stream(nct_var* var, FILE* f) {
+    setrule(var, nct_r_stream);
+    nct_rule* r = var->rule+nct_r_stream;
+    r->arg.v = f;
+}
+
 void nct_unlink_data(nct_var* var) {
     if (!cannot_free(var))
 	free(nct_rewind(var)->data);
-    if (var->nusers)
-	(*var->nusers)--;
+    if (var->nusers) {
+	if (!*var->nusers)
+	    free_fakeheap(var->nusers);
+	else
+	    (*var->nusers)--;
+    }
     var->data = var->nusers = NULL;
     var->capacity = 0;
+}
+
+void nct_unlink_stream(nct_var* var) {
+    if (!hasrule(var, nct_r_stream))
+	return;
+    char* nusers = get_stream_nusers_p(var);
+    if (!nusers || !*nusers) {
+	fclose(nct_get_stream(var));
+	free_fakeheap(nusers);
+    }
+    else
+	(*nusers)--;
+    rmrule(var, nct_r_stream);
 }
 
 enum {_createcoords=1<<0, _defonly=1<<1, _mutable=1<<2};
