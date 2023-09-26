@@ -200,7 +200,9 @@ int nct_createcoords_nc_def(nct_set* src, const char* name);
 nct_att* nct_copy_att(nct_var*, const nct_att*);
 /* Make a new coordinate variable with the same bounds as in coord but different interval and length. */
 nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name);
-nct_var* nct_copy_var(nct_set*, nct_var*, int link); // data are copied, if link is false
+/* FIXME: This does not work in some special cases. For example when src has concatenated variables,
+   which are not loaded. The rules are just copied and no indication about shared use is written anywhere. */
+nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link); // data are copied, if link is false
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
 #define nct_create_simple_gd(...) _nct_create_simple_gd(__VA_ARGS__, 0)

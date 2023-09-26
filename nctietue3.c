@@ -18,6 +18,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 /* uses private nct_set.rules */
 #define setrule(a, r) ((a)->rules |= 1<<(r))
 #define hasrule(a, r) ((a)->rules & 1<<(r))
+#define anyrule(a, r) ((a)->rules & (r))
 #define rmrule(a, r)  ((a)->rules &= ~(1<<(r)))
 
 #define startpass			\
@@ -480,6 +481,12 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
 }
 
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
+    if (anyrule(src, nct_r_stream | nct_r_mem) || (hasrule(src, nct_r_concat) && src->endpos-src->startpos < src->len)) {
+	nct_puterror("The program will likely crash on free or earlier due to copying variable %s (%s).\n"
+		"Set 'nct_error_action = nct_pass' to still continue.\n", src->name, nct_get_filename(src->super));
+	nct_other_error;
+    }
+
     nct_var* var;
     if (nct_iscoord(src)) {
 	int dimid = nct_get_dimid(dest, src->name);
@@ -517,6 +524,10 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 
     for(int a=0; a<src->natts; a++)
 	nct_copy_att(var, src->atts+a);
+
+    var->rules = src->rules;
+    memcpy(var->rule, src->rule, sizeof(var->rule));
+    rmrule(var, nct_r_concat);
 
     if (link)
 	nct_link_data(var, src);
@@ -599,16 +610,17 @@ failed:
 }
 
 nct_var* nct_coord2dim(nct_var* var) {
-    var->ncid = -1;
-    var->id_var = 0;
     var->dimids = (free(var->dimids), NULL);
+    var->ndims = 0;
     for(int i=var->natts-1; i>=0; i--)
 	_nct_free_att(var->atts+i);
     var->atts = (free(var->atts), NULL);
-    var->attcapacity = 0;
+    var->natts = var->attcapacity = 0;
     nct_unlink_data(var);
     var->dtype = NC_NAT;
     _nct_drop_var(var);
+    var->ncid = -1;
+    var->id_var = 0;
     return var;
 }
 
@@ -1261,6 +1273,8 @@ void nct_print_atts(nct_var* var, const char* indent0, const char* indent1) {
 }
 
 void nct_print_var(nct_var* var, const char* indent) {
+    if (!nct_get_var(var->super, var->name))
+	return nct_print_dim(var, indent);
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
 	   nct_varname_color, var->name, var->len, nct_default_color,

@@ -7,7 +7,7 @@ have_proj = 1
 # Comment this out if you don't want that.
 have_lz4 = 1
 
-CFLAGS = -Wall -g -fPIC -O0
+CFLAGS = -Wall -g -fPIC -O3
 CC = gcc
 
 prefix = /usr/local
