@@ -967,11 +967,10 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_
     return var;
 }
 
-nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name, int freeable_name) {
+nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name) {
     double v0 = nct_get_floating(coord, 0);
     double v1 = nct_get_floating_last(coord, 1);
     nct_var* new = nct_add_dim(coord->super, round(v1-v0+1), new_name);
-    new->freeable_name = freeable_name;
     nct_put_interval(nct_dim2coord(new, NULL, NC_INT), v0, gap);
     for(int a=0; a<coord->natts; a++)
 	nct_copy_att(new, coord->atts+a);
