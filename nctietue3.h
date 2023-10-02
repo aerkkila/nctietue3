@@ -422,10 +422,13 @@ struct nct_readmem_t {
  * default:
  *      Everything is read at once.
  *
- * nct_ratt:
- *	Read attributes. Might be the default in future.
- * default:
+ * nct_rnoatt:
  *	Ignore attributes.
+ * nct_ratt:
+ *	Ignored for backwards compatibility.
+ *	Attributes used to be ignored without this option.
+ * default:
+ *	Read attributes.
  *
  * nct_rkeep:
  *	FIXME: Works properly only if added to global nct_readflags.
@@ -451,9 +454,9 @@ struct nct_readmem_t {
  * nct_rnetcdf:
  * 	Filetype is netcdf.
  * default:
- * 	Other filetype can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
+ * 	Other filetypes can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
  */
-enum {nct_rlazy=1<<0, nct_ratt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6};
+enum {nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.

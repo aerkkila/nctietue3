@@ -1578,13 +1578,13 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* dim) {
 
     /* No loading data. Making list of nct_set* and setting right loading rules. */
     set = setptr = calloc(nfiles+1, sizeof(nct_set)); // +1 for NULL-termination
-    nct_read_ncf_gd(set, ptr, nct_readflags|nct_ratt); // concatenation needs attributes to convert time units
+    nct_read_nc_gd(set, ptr);
     set->owner = 1;
     nfiles--;
     setrule(set, nct_r_list); // so that nct_free knows to free other members as well
     ptr += strlen(ptr)+1;
     while (*ptr) {
-	nct_read_ncf_gd(++setptr, ptr, nct_readflags|nct_ratt);
+	nct_read_nc_gd(++setptr, ptr);
 	nct_concat(set, setptr, dim, --nfiles);
 	ptr += strlen(ptr)+1;
     }
@@ -1592,12 +1592,12 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* dim) {
 
 read_and_load:
     set = malloc(sizeof(nct_set));
-    nct_read_ncf_gd(set, ptr, nct_readflags|nct_ratt); // concatenation needs attributes to convert time units
+    nct_read_nc_gd(set, ptr);
     set->owner = 1;
     nfiles--;
     ptr += strlen(ptr)+1;
     while (*ptr) {
-	nct_readm_ncf(set1, ptr, nct_readflags|nct_ratt);
+	nct_readm_nc(set1, ptr);
 	nct_concat(set, &set1, dim, --nfiles);
 	nct_free1(&set1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
 	ptr += strlen(ptr)+1;

@@ -143,7 +143,7 @@ static nct_set* _nct_read_var_info(nct_set *set, int varid, int flags) {
     dest->dimids = malloc(dest->dimcapacity*sizeof(int));
     memcpy(dest->dimids, dimids, ndims*sizeof(int));
 
-    if (!(flags & nct_ratt)) {
+    if (flags & nct_rnoatt) {
 	dest->natts = dest->attcapacity = 0;
 	return set;
     }
