@@ -297,13 +297,14 @@ nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const 
     char name[strlen(var->name)+15];
     sprintf(name, "%s_transform", var->name);
     newvar = nct_add_var(var->super, NULL, var->dtype, strdup(name), var->ndims, dimids);
+    newvar->endpos = 0;
     newvar->freeable_name = 1;
     nct_ensure_unique_name(newvar);
 
     nct_set_stream(newvar, f);
 
     newvar->nfiledims = newvar->ndims;
-    for (int i=MIN(newvar->ndims, nct_maxdims); i>=0; i--)
+    for (int i=MIN(newvar->ndims, nct_maxdims)-1; i>=0; i--)
 	newvar->filedimensions[i] = nct_get_vardim(newvar, i)->len;
 
     return newvar;
