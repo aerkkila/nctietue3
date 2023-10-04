@@ -198,29 +198,27 @@ __ssize_t read_converted(void* vc, char* dst, size_t nbytes) {
     return current*size1;
 }
 
+long long ceildiv(long long a, long long div) {
+    long long ret = a/div;
+    return ret + !!(a%div);
+}
+
 int seek_converted(void* vc, __off64_t* pos, int seek) {
     nctproj_cookie* c = vc;
     switch(seek) {
-	case SEEK_SET:
-	    //*pos = c->pos = *pos;
-	    break;
-	case SEEK_CUR:
-	    *pos = c->pos += *pos;
-	    break;
-	case SEEK_END:
-	    *pos = c->pos = c->len + *pos;
-	    break;
-	default:
-	    return 1;
+	case SEEK_SET: break;
+	case SEEK_CUR: *pos += c->pos * c->size1; break;
+	case SEEK_END: *pos += c->len * c->size1; break;
+	default: return 1;
     }
-    c->pos = *pos / c->size1;
-    *pos = c->pos * c->size1;
-    if (c->pos < 0) {
+    if (*pos < 0) {
 	*pos = c->pos = 0;
 	return 2;
     }
+    c->pos = ceildiv(*pos, c->size1);
     if (c->pos >= c->len) {
-	*pos = c->pos = c->len;
+	c->pos = c->len;
+	*pos = c->len / c->size1;
 	return EOF;
     }
     return 0;
