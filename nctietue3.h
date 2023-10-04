@@ -154,7 +154,6 @@ struct nct_anyd {
 };
 
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
-#define nct_loadable(var) (var->ncid>=0 && ((var)->super->ncid > 0 || nct_get_filename(var->super)))
 
 #define nct_varid(var) ((var)->id_var-1)
 #define nct_dimid(var) ((var)->id_dim-1)
@@ -219,7 +218,7 @@ nct_var* nct_coord2dim(nct_var* var); // The variable is removed and the dimensi
    Argument shrink tells whether to realloc to the smaller size if possible.
    */
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink);
-nct_var* nct_drop_vardim_first(nct_var*) __THROW __attribute__((deprecated));
+nct_var* nct_drop_vardim_first(nct_var*) __attribute__((deprecated ("Use nct_drop_vardim instead.")));
 
 /* Fill value won't be correct if some variables have floating point data and other variables integer data.
    To expand in start: start0_end1 == 0.
@@ -259,6 +258,7 @@ void nct_free1(nct_set*);
 nct_set* nct_clear(nct_set*); // Frees the contents but not the object. Other fields than set->owner are cleared.
 
 void		nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // coordinates of the index
+size_t		nct_get_ind_from_coords(const nct_var* var, const size_t* coord);
 nct_att*	nct_get_varatt(const nct_var* var, const char* name);
 char*		nct_get_varatt_text(const nct_var*, const char*);
 nct_var*	nct_get_dim(const nct_set* set, const char* name);
@@ -307,14 +307,14 @@ int nct_link_stream(nct_var* dest, nct_var* src);
 #define nct_load_partially(var, start, end) nct_load_partially_as(var, start, end, NC_NAT)
 nct_var* nct_load_partially_as(nct_var*, long start, long end, nc_type nctype);
 nct_var* nct_load_as(nct_var*, nc_type);
+int	 nct_loadable(const nct_var*); // This check is always done in the load-function.
 
 /* Load only if needed. */
 nct_var* nct_perhaps_load_partially_as(nct_var* var, long start, long end, nc_type nctype);
 nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end);
 
-/* For special cases when the variable has a FILE pointer from which the data comes from.
-   If that is the case, you probably know it. */
-nct_var* nct_load_stream(nct_var*, size_t);
+/* Use nct_load_instead. */
+nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_load instead.")));
 
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 

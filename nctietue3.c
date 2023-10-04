@@ -899,6 +899,16 @@ void nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind) {
     }
 }
 
+size_t nct_get_ind_from_coords(const nct_var* var, const size_t* coords) {
+    size_t ind = 0;
+    size_t cum = 1;
+    for (int i=var->ndims-1; i>=0; i--) {
+	ind += cum * coords[i];
+	cum *= nct_get_vardim(var, i)->len;
+    }
+    return ind;
+}
+
 nct_var* nct_get_dim(const nct_set* set, const char* name) {
     int ndims = set->ndims;
     for(int i=0; i<ndims; i++)

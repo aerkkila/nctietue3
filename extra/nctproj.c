@@ -202,7 +202,7 @@ int seek_converted(void* vc, __off64_t* pos, int seek) {
     nctproj_cookie* c = vc;
     switch(seek) {
 	case SEEK_SET:
-	    *pos = c->pos = *pos;
+	    //*pos = c->pos = *pos;
 	    break;
 	case SEEK_CUR:
 	    *pos = c->pos += *pos;
@@ -213,6 +213,8 @@ int seek_converted(void* vc, __off64_t* pos, int seek) {
 	default:
 	    return 1;
     }
+    c->pos = *pos / c->size1;
+    *pos = c->pos * c->size1;
     if (c->pos < 0) {
 	*pos = c->pos = 0;
 	return 2;
@@ -299,7 +301,13 @@ nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const 
     newvar = nct_add_var(var->super, NULL, var->dtype, strdup(name), var->ndims, dimids);
     newvar->freeable_name = 1;
     nct_ensure_unique_name(newvar);
+
     nct_set_stream(newvar, f);
+
+    newvar->nfiledims = newvar->ndims;
+    for (int i=MIN(newvar->ndims, nct_maxdims); i>=0; i--)
+	newvar->filedimensions[i] = nct_get_vardim(newvar, i)->len;
+
     return newvar;
 }
 

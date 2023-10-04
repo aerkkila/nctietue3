@@ -14,6 +14,68 @@ typedef struct {
     int ifile; // only used for printing progress (nct_verbose)
 } loadinfo_t;
 
+static size_t get_fileind_from_coords(const nct_var* var, const size_t* coords) {
+    size_t ind = 0;
+    size_t cum = 1;
+    for (int i=var->nfiledims-1; i>=0; i--) {
+	ind += cum * coords[i];
+	cum *= var->filedimensions[i];
+    }
+    return ind;
+}
+
+static void load_stream_partially(nct_var* var, loadinfo_t* info, const size_t* start, int cutdim, int nowdim, size_t* nloaded) {
+    size_t mutstart[var->ndims];
+    memcpy(mutstart, start, sizeof(mutstart));
+
+    if (nowdim < cutdim) {
+	for (int i=0; i<info->fcount[nowdim]; i++) {
+	    load_stream_partially(var, info, mutstart, cutdim, nowdim+1, nloaded);
+	    mutstart[nowdim]++;
+	    /* count need not to be changed along start. */
+	}
+	return;
+    }
+    else if (nowdim > cutdim) {
+	nct_puterror("nowdim (%i) should be less or equal than cutdim (%i) in %s (%s).\n", nowdim, cutdim, __func__, __FILE__);
+	nct_other_error;
+    }
+
+    long len = nct_get_len_from(var, cutdim+1);
+    long pos = get_fileind_from_coords(var, start);
+    long wants = len*info->fcount[cutdim];
+
+    if (nct_verbose) {
+	printf("    fseek %zu (%zu", pos, start[0]);
+	for (int i=1; i<var->nfiledims; i++)
+	    printf(" %zu", start[i]);
+	printf("), fread %zu (%zu", wants, 0<cutdim ? 1 : info->fcount[0]);
+	for (int i=1; i<var->nfiledims; i++)
+	    printf(" %zu", i<cutdim ? 1 : info->fcount[i]);
+	printf(")");
+	verbose_line_ending();
+    }
+
+    long ret;
+    FILE* stream = nct_get_stream(var);
+    if ((ret = fseek(stream, pos*info->size1, SEEK_SET)))
+	nct_puterror("fseek returned %li\n", ret);
+    if ((ret = fread(info->data + *nloaded*info->size1, info->size1, wants, stream)) != wants)
+	nct_puterror("fread returned %li instead of %zu in %s (%i)\n", ret, wants, __func__, __LINE__);
+    *nloaded += wants;
+}
+
+static void load_stream(nct_var* var, loadinfo_t* info) {
+    FILE* stream = nct_get_stream(var);
+    size_t nread, nloaded=0;
+    for (int idim=var->ndims-1; idim>=0; idim--)
+	if (info->fcount[idim] < var->filedimensions[idim])
+	    return load_stream_partially(var, info, info->fstart, idim, 0, &nloaded);
+    if ((nread = fread(info->data, info->size1, var->len, stream)) != var->len)
+	nct_puterror("fread returned %zu instead of %zu in %s (%i)\n", nread, var->len, __func__, __LINE__);
+    return;
+}
+
 static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
     long carry = 0, num, dimlen = 1;
     for(int i=ndims-1; i>=0; i--) {
@@ -101,6 +163,8 @@ error:
 }
 
 static void load_for_real(nct_var* var, loadinfo_t* info) {
+    if (hasrule(var, nct_r_stream))
+	return load_stream(var, info);
     perhaps_open_the_file(var);
     ncfunk(info->getfun, var->super->ncid, var->ncid, info->fstart, info->fcount, info->data);
     perhaps_close_the_file(var->super);
@@ -266,6 +330,13 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 
 nct_var* nct_load_as(nct_var* var, nc_type dtype) {
     return nct_load_partially_as(var, 0, var->len, dtype);
+}
+
+/* Uses private nct_set.fileinfo. */
+int nct_loadable(const nct_var* var) {
+    return
+	(var->ncid>=0 && ((var)->super->ncid > 0 || var->super->fileinfo)) ||
+	hasrule(var, nct_r_stream);
 }
 
 #undef MIN
