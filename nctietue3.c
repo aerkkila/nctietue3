@@ -952,6 +952,18 @@ int nct_get_vardimid(const nct_var* restrict var, int dimid) {
     return -1;
 }
 
+void nct_get_varshape_list(const nct_var* var, ...) {
+    va_list list;
+    va_start(list, var);
+    for (int i=0; i<var->ndims; i++) {
+	size_t* ptr = va_arg(list, size_t*);
+	if (!ptr)
+	    continue;
+	*ptr = nct_get_vardim(var, i)->len;
+    }
+    va_end(list);
+}
+
 int nct_get_varid(const nct_set* restrict set, const char* restrict name) {
     int nvars = set->nvars;
     for(int i=0; i<nvars; i++)
