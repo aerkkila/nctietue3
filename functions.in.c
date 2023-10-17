@@ -24,8 +24,8 @@ static void nct_print_datum_@nctype(const void* vdatum) {
 	    return; }
     }
     else if (datum < 0 && (datum > -1e-5 || datum <= -1e6)) {
-	    printf("%e", datum);
-	    return; }
+	printf("%e", datum);
+	return; }
 #endif
     printf("%@form", datum);
 }
