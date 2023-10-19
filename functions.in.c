@@ -79,6 +79,14 @@ nct_var* nct_put_interval_@nctype(nct_var* var, double d0, double dgap) {
     return var;
 }
 
+double nct_get_floating_from_@nctype(const void* vdata, long ind) {
+    return (double)((ctype*)vdata)[ind];
+}
+
+long long nct_get_integer_from_@nctype(const void* vdata, long ind) {
+     return (long long)((ctype*)vdata)[ind];
+}
+
 double nct_get_floating_@nctype(const nct_var* var, size_t ind) {
     return (double)((ctype*)var->data)[ind];
 }

@@ -32,7 +32,7 @@ static void load_stream_partially(nct_var* var, loadinfo_t* info, const size_t* 
 	for (int i=0; i<info->fcount[nowdim]; i++) {
 	    load_stream_partially(var, info, mutstart, cutdim, nowdim+1, nloaded);
 	    mutstart[nowdim]++;
-	    /* count need not to be changed along start. */
+	    /* count needs not to be changed along start. */
 	}
 	return;
     }
@@ -253,6 +253,8 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	if (nct_verbose)
 	    print_progress(var, info, len);
 	load_for_real(var, info);
+	if (nct_after_load)
+	    nct_after_load(var, info->data, len, info->fstart, info->fcount);
 	info->data += len * info->size1;
 	info->pos += len;
 	info->start += len;

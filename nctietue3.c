@@ -109,6 +109,7 @@ static void free_fakeheap(void* ptr) {
 
 int nct_readflags, nct_ncret, nct_error_action, nct_verbose, nct_register;
 FILE* nct_stderr;
+void (*nct_after_load)(nct_var*, void*, size_t, const size_t*, const size_t*) = NULL;
 
 const char* nct_error_color   = "\033[1;91m";
 const char* nct_varset_color  = "\033[1;35m";
@@ -912,24 +913,30 @@ size_t nct_get_ind_from_coords(const nct_var* var, const size_t* coords) {
 nct_var* nct_get_dim(const nct_set* set, const char* name) {
     int ndims = set->ndims;
     for(int i=0; i<ndims; i++)
-	if (!strcmp(name, set->dims[i]->name))
+	if (!strcmp(name, set->dims[i]->name)) {
+	    nct_register = i;
 	    return set->dims[i];
+	}
     return NULL;
 }
 
 nct_var* nct_get_var(const nct_set* set, const char* name) {
     int nvars = set->nvars;
     for(int i=0; i<nvars; i++)
-	if (!strcmp(name, set->vars[i]->name))
+	if (!strcmp(name, set->vars[i]->name)) {
+	    nct_register = i;
 	    return set->vars[i];
+	}
     return NULL;
 }
 
 nct_att* nct_get_varatt(const nct_var* var, const char* name) {
     int natts = var->natts;
     for(int i=0; i<natts; i++)
-	if(!strcmp(var->atts[i].name, name))
+	if(!strcmp(var->atts[i].name, name)) {
+	    nct_register = i;
 	    return var->atts+i;
+	}
     return NULL;
 }
 
@@ -1660,6 +1667,18 @@ nct_var* nct_rewind(nct_var* var) {
     if (var->data)
 	var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
     return var;
+}
+
+void nct_rm_varatt_num(nct_var* var, int num) {
+    nct_att* ptr = var->atts + num;
+    memmove(ptr, ptr+1, (var->natts-(num+1)) * sizeof(nct_att));
+    var->natts--;
+    /* allocated memory for var->atts is not shortened */
+}
+
+void nct_rm_varatt_name(nct_var* var, const char* attname) {
+    if (nct_get_varatt(var, attname))
+	nct_rm_varatt_num(var, nct_register);
 }
 
 void nct_rm_var(nct_var* var) {
