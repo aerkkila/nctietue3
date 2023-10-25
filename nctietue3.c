@@ -995,6 +995,16 @@ size_t nct_get_len_from(const nct_var* var, int start) {
     return len;
 }
 
+long nct_get_interval_ms(int unit) {
+    if (unit < 0)
+	return -1;
+    if (unit >= sizeof(ms_per_timeunit) / sizeof(ms_per_timeunit[0])) {
+	nct_puterror("invalid time unit (%i) in %s", unit, __func__);
+	nct_return_error(0);
+    }
+    return ms_per_timeunit[unit];
+}
+
 double nct_getg_floating(const nct_var* var, size_t ind) {
     return var->data ? nct_get_floating(var, ind) : nct_getl_floating(var, ind);
 }

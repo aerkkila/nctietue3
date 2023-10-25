@@ -284,6 +284,7 @@ void		nct_get_varshape_list(const nct_var* var, ...); // size_t *lendim0, size_t
 int		nct_get_varid(const nct_set* restrict, const char* restrict);
 int		nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t		nct_get_len_from(const nct_var*, int startdim);
+long		nct_get_interval_ms(int timeunit_enumeration); // argument can be nct_mktime(args).d
 FILE*		nct_get_stream(const nct_var*);
 const char*	nct_get_filename(const nct_set*);
 double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
@@ -352,7 +353,7 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t i
  *		$epoch has the form of yyyy-mm-dd [hhmmss]
  *	tm: This will become (struct tm)$epoch. Can be NULL.
  * Returns:
- *	ret.d = Enumeration of the recognized time unit or -1 on error.
+ *	ret.d = Enumeration of the recognized time unit or -1 on error. See also nct_get_interval_ms.
  *	ret.a.t = unix time of $epoch.
  */
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
