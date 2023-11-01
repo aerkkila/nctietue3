@@ -309,6 +309,10 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
     }
     if (nct_iscoord(var))
 	return load_coordinate_var(var);
+    else if (!var->ndims) {
+	nct_allocate_varmem(var);
+	return ((nct_ncget_t)nct_getfun[var->dtype])(var->super->ncid, var->ncid, var->data), var;
+    }
     size_t old_length = var->len;
     var->len = end-start;
     nct_allocate_varmem(var);
