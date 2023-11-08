@@ -1258,7 +1258,8 @@ nct_anyd nct_mktime0(const nct_var* var, struct tm* timetm) {
     int ui;
     if(!timetm)
 	timetm = &tm_;
-    nct_interpret_timeunit(var, timetm, &ui);
+    if (nct_interpret_timeunit(var, timetm, &ui))
+	return (nct_anyd){.d=-1};
     return (nct_anyd){.a.t=mktime(timetm), .d=ui};
 }
 
