@@ -432,6 +432,12 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
     return nct_concat_varids(vs0, vs1, dimname, howmany_left, NULL, -1);
 }
 
+long long nct_convert_time_anyd(time_t time, nct_anyd units) {
+    long long offset_ms = (time - units.a.t) * 1000;
+    long ms_per_unit = nct_get_interval_ms(units.d);
+    return offset_ms / ms_per_unit;
+}
+
 nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
     nct_att* att = nct_get_varatt(var, "units");
     if(!att)

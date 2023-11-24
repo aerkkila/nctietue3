@@ -193,6 +193,7 @@ nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left)
 nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
 
 /* see nct_mktime0 */
+long long nct_convert_time_anyd(time_t time, nct_anyd units);
 nct_var* nct_convert_timeunits(nct_var* var, const char* units);
 
 /* Like nct_write_nc but returns ncid without closing it.
