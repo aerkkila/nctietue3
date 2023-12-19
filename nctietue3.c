@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <stdint.h>
 #include "nctietue3.h"
 #include <netcdf_mem.h> // must be after netcdf.h from nctietue3.h
 /* for multifile read using regex */
@@ -336,11 +335,11 @@ void nct_allocate_varmem(nct_var* var) {
    */
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
     int dimid0, dimid1, varid0=0, varid1;
-    if(!dimname)
+    if (!dimname)
 	dimname = "-0";
-    if(dimname[0] == '-') {
-	/* A number tells which vardim to concatenate along. Defined based on dimensions of the first var. */
-	if(sscanf(dimname+1, "%i", &dimid0) == 1) {
+    if (dimname[0] == '-') {
+	/* A number tells which vardim to concatenate along. Defined based on the dimensions of the first var. */
+	if (sscanf(dimname+1, "%i", &dimid0) == 1) {
 	    nct_foreach(vs0, v)
 		if (dimid0 < v->ndims) {
 		    dimname = vs0->dims[v->dimids[dimid0]]->name;
@@ -348,7 +347,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		}
 	}
 	/* Not a concatenation but useful. */
-	else if(!strcmp(dimname, "-v")) {
+	else if (!strcmp(dimname, "-v")) {
 	    varid1=-1;
 	    nct_foreach(vs1, var1) {
 		nct_load(var1);
@@ -1572,12 +1571,16 @@ nct_set* nct_read_ncf_gd(nct_set* s, const void* vfile, int flags) {
    */
 
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
-    return nct_read_mfnc_regex_(filename, regex_cflags, dim, NULL, 0, 0, NULL);
+    return nct_read_mfnc_regex_(filename, regex_cflags, dim, NULL, NULL, 0, 0, NULL);
 }
 
-nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim,
+nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* dim, void *strcmpfun) {
+    return nct_read_mfnc_regex_(filename, regex_cflags, dim, strcmpfun, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim, void *strcmpfun_for_sorting,
 	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    char* names = nct__get_filenames_(filename, 0, matchfun, size1, nmatch, matchdest);
+    char* names = nct__get_filenames_(filename, 0, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
     if (nct_verbose) {
 	char* str = names;
@@ -1875,11 +1878,15 @@ void nct_write_nc(const nct_set* src, const char* name) {
     endpass;
 }
 
-char* nct__get_filenames(const char* restrict filename, int regex_cflags) {
-    return nct__get_filenames_(filename, regex_cflags, NULL, 0, 0, NULL);
+char* nct__get_filenames(const char* restrict filename, int flags) {
+    return nct__get_filenames_(filename, flags, strcmp, NULL, 0, 0, NULL);
 }
 
-char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
+char* nct__get_filenames_cmpfun(const char* restrict filename, int flags, void *strcmpfun_for_sorting) {
+    return nct__get_filenames_(filename, flags, strcmpfun_for_sorting, NULL, 0, 0, NULL);
+}
+
+char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void *strcmpfun_for_sorting,
 	void (*fun)(const char* restrict, int, regmatch_t* pmatch, void*), int size1dest, int nmatch, void** dest) {
     static int num;
     if (!filename)
@@ -1955,7 +1962,7 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
     void* destarr[2] = {sorted_dest};
     if (fun)
 	destarr[1] = *dest;
-    nct__sort_str(sorted, match, num, fun? destarr: NULL, size1dest);
+    nct__sort_str(sorted, match, num, fun? destarr: NULL, size1dest, strcmpfun_for_sorting? strcmpfun_for_sorting: strcmp);
     if (fun) {
 	free(*dest);
 	*dest = sorted_dest;
@@ -1966,9 +1973,44 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags,
     return sorted;
 }
 
+static int isnumber(char a) {
+    return '0' <= a && a <= '9';
+}
+
+static int digits_in_number(long a) {
+    int n = 1;
+    while (a > 9) {
+	a /= 10;
+	n++;
+    }
+    return n;
+}
+
+int nct__strcmp_numeric(const char *restrict a, const char *restrict b) {
+    while (*a && *b) {
+	if (isnumber(*a) && isnumber(*b)) {
+	    int ia = atoi(a);
+	    int ib = atoi(b);
+	    if (ia != ib)
+		return ia - ib;
+	    a += digits_in_number(ia);
+	    b += digits_in_number(ib);
+	    continue;
+	}
+	if (*a != *b)
+	    return (int)*a - (int)*b;
+	a++;
+	b++;
+    }
+    if (*a) return -1;
+    if (*b) return 1;
+    return 0;
+}
+
 /* Selection sort that does not change src.
  * Other is an optional array which is sorted like src. other[0] is dest and other[1] is src. */
-char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], int size1other) {
+char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], int size1other,
+    int (*strcmpfun)(const char*, const char*)) {
     const char *sptr, *strptr;
     char *dptr = dst;
     if (n <= 0) {
@@ -1987,7 +2029,7 @@ char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], 
 	while(*sptr) {
 	    if (!used[ind]) {
 		breakflag = 0;
-		if (!strptr || strcmp(sptr, strptr) < 0) {
+		if (!strptr || strcmpfun(sptr, strptr) < 0) {
 		    strptr = sptr;
 		    indstr = ind;
 		}

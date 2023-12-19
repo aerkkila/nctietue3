@@ -505,11 +505,13 @@ nct_set* nct_read_ncf(const void* file, int readflags);
 nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
+nct_set* nct_read_mfnc_regex_strcmp(const char* filename_regex, int regex_cflags, char* concatdim, void *strcmpfun);
 /* See comment on nct__get_filenames. */
 nct_set* nct_read_mfnc_regex_(
 	const char*	filename,
 	int		regex_cflags,
 	char*		concatdim,
+	void*		strcmpfun,
 	void (*matchfun)(
 	    const char* restrict,	// filename
 	    int,			// nmatch
@@ -633,9 +635,11 @@ nct_var*  nct_meannan_first(nct_var*);
 /* Returns existing filenames that match a regular expression.
  * regex:
  *	A regular expression.
- *	In regex = "dir/file", dir is matched literally and file as a regular expression
+ *	In regex = "dir0/dir1/file", dir0/dir1 is matched literally and file as a regular expression
  * regex_cflags:
- *	See cflags in man regex. If unsure, say 0. If things don't work, say REGEX_EXTENDED.
+ *	See cflags in man regex.
+ * strcmpfun_for_sorting:
+ *	similar to cmp-parameter for qsort. If NULL, defaults to strcmp. See also nct__strcmp_numeric.
  *
  * Rest of the arguments are for extracting data from the matched filenames.
  * fun:
@@ -653,9 +657,11 @@ nct_var*  nct_meannan_first(nct_var*);
  * 	If name == NULL, returns numbers of names matched on previous call as intptr_t.
  */
 char* nct__get_filenames(const char* restrict regex, int regex_cflags);
+char* nct__get_filenames_cmpfun(const char* restrict filename, int flags, void *strcmpfun_for_sorting);
 char* nct__get_filenames_(
     const char* restrict regex,
     int regex_cflags,
+    void *strcmpfun_for_sorting,
     void (*fun)(const char* restrict, int, regmatch_t*, void*),
     int size1,
     int nmatch,
@@ -667,7 +673,13 @@ char* nct__get_filenames_(
 /* src has the form of result of nct__get_filenames.
    n is optional: if -1 if given, n is calculated.
    other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given. */
-char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other);
+char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other,
+    int (*strcmpfun)(const char*, const char*));
+
+/* To be passed as strcmpfun to nct__sort_str, nct_read_mfnc_regex, etc.,
+   if filenames such as {file2, file10} should not be sorted alphabetically as with strcmp
+   but numerically, i.e. file2 before file10. */
+int nct__strcmp_numeric(const char *restrict a, const char *restrict b);
 
 /* Defined only if compiled with have_lz4 */
 /* In: compressed lz4 frame. Out: decompressed data, allocated in the function. */
