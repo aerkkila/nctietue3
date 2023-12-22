@@ -17,8 +17,8 @@ endif
 
 all: libnctietue3.so
 
-nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h transpose.c config.mk $(extra_dependencies)
-	$(CC) $(CFLAGS) $(macros) -o $@ -c $<
+nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h transpose.c config.mk $(extra_dependencies) Makefile
+	$(CC) $(CFLAGS) $(macros) -O0 -o $@ -c $<
 
 functions.o: functions.c function_wrappers.c config.mk nctietue3.h
 	$(CC) $(CFLAGS) -o $@ -c $<

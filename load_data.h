@@ -6,6 +6,7 @@ typedef struct {
     int size1;
     size_t ndata;
     nct_ncget_partial_t getfun;
+    nct_ncget_t getfun_full;
     /* mutable variables */
     size_t *fstart, *fcount, start;
     /* restricted: only incremented at loading */
@@ -113,8 +114,10 @@ static size_t get_read_length(const nct_var* var) {
 
 static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_out) {
     if (!var->ndims) {
-	if (start == 0)
+	if (start == 0) {
+	    *start_out = *ifile_out = 0;
 	    return 0;
+	}
 	else
 	    goto error;
     }
@@ -166,14 +169,17 @@ static void load_for_real(nct_var* var, loadinfo_t* info) {
     if (hasrule(var, nct_r_stream))
 	return load_stream(var, info);
     perhaps_open_the_file(var);
-    ncfunk(info->getfun, var->super->ncid, var->ncid, info->fstart, info->fcount, info->data);
+    if (var->nfiledims == 0)
+	ncfunk(info->getfun_full, var->super->ncid, var->ncid, info->data);
+    else
+	ncfunk(info->getfun, var->super->ncid, var->ncid, info->fstart, info->fcount, info->data);
     perhaps_close_the_file(var->super);
 }
 
 static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
     int idim = ndims - 1;
     size_t len = 1;
-    for(; idim>=0; idim--) {
+    for (; idim>=0; idim--) {
 	size_t try = len * rect[idim];
 	if (try > maxsize)
 	    goto Break;
@@ -181,7 +187,7 @@ static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
     }
     return len;
 Break:
-    for(int i=0; i<idim; i++)
+    for (int i=0; i<idim; i++)
 	rect[i] = 1;
     size_t n_idim = maxsize / len;
     rect[idim] = n_idim;
@@ -198,7 +204,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 	info->fcount[0] = 1;
 	return 1;
     }
-    for(int i=var->nfiledims-1; i>=0; i--) {
+    for (int i=var->nfiledims-1; i>=0; i--) {
 	nct_var* dim = nct_get_vardim(var, i+n_extra);
 	info->fstart[i] = dim->rule[nct_r_start].arg.lli;
 	info->fcount[i] = MIN(var->filedimensions[i] - info->fstart[i], dim->len);
@@ -211,7 +217,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     size_t result;
     if ((result = make_coordinates(move, info->fcount, var->nfiledims)))
 	nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, nct_get_filename(var->super), var->name);
-    for(int i=var->nfiledims-1; i>=0; i--) {
+    for (int i=var->nfiledims-1; i>=0; i--) {
 	if (move[i]) {
 	    info->fstart[i] += move[i];
 	    info->fcount[i] -= move[i];
@@ -266,7 +272,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
     nct_var* var1 = from_concatlist(var, filenum-1);
     long old_start = info->start;
     info->start = start_thisfile;
-    while(!next_load(var1, info));
+    while (!next_load(var1, info));
     info->start += old_start - start_thisfile;
     return 0;
 }
@@ -324,6 +330,7 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 	.ndata	= end - start,
 	.data	= var->data,
 	.getfun	= nct_getfun_partial[var->dtype],
+	.getfun_full = nct_getfun[var->dtype],
 	.start	= start,
     };
     while (!next_load(var, &info));

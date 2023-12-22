@@ -324,6 +324,31 @@ void nct_allocate_varmem(nct_var* var) {
     nct_other_error;
 }
 
+/* A new dimension needs to be added only to the first set. */
+nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation) {
+    static nct_var *dim;
+    static nct_set *previous_concatenation;
+    if (!var) {
+	dim = NULL;
+	previous_concatenation = NULL;
+	return dim; }
+
+    if (!dim)
+	dim = nct_ensure_unique_name(nct_add_dim(var->super, 1, "dimension"));
+
+    dim->len += concatenation != previous_concatenation;
+    previous_concatenation = concatenation;
+
+    int dimid = nct_dimid(dim);
+    if (dimid < 0) {
+	nct_puterror("corrupted dimension in concatenation\n");
+	return dim = NULL; }
+    if (nct_get_vardimid(var, dimid) >= 0)
+	return dim;
+    nct_add_vardim_first(var, dimid);
+    return dim;
+}
+
 /* Concatenation is currently not supported along other existing dimensions than the first one.
    Coordinates will be loaded if aren't already.
    Variable will not be loaded, except if the first is loaded and the second is not.
@@ -333,11 +358,87 @@ void nct_allocate_varmem(nct_var* var) {
    *	free(set1)
    *	load(set0->vars[n])
    */
+nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
+    int dimid0 = nct_get_dimid(vs0, dimname);
+    if (dimid0 < 0)
+	dimid0 = nct_dimid(nct_add_dim(vs0, 1, dimname));
+    else if (vs0->dims[dimid0]->len == 0) {
+	/* Change length zero to one. We assume that such dimension does not belong to any variable. */
+	nct_var* dim = vs0->dims[dimid0];
+	dim->len = 1;
+	if (nct_iscoord(dim)) {
+	    nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
+	    memset(dim->data, 0, nctypelen(dim->dtype));
+	}
+    }
+
+    /* Concatenate the dimension. */
+    int dimid1 = nct_get_dimid(vs1, dimname);
+    if (dimid1 < 0)
+	vs0->dims[dimid0]->len++;
+    else {
+	/* Change length zero to one. We assume that such dimension does not belong to any variable. */
+	if (vs1->dims[dimid1]->len == 0) {
+	    nct_var* dim = vs1->dims[dimid1];
+	    dim->len = 1;
+	    if (nct_iscoord(dim)) {
+		nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
+		memset(dim->data, 0, nctypelen(dim->dtype));
+	    }
+	}
+	vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
+
+	/* If the dimension is also a variable, concat that */
+	int varid0 = nct_get_varid(vs0, dimname);
+	int varid1 = nct_get_varid(vs1, dimname);
+
+	if (varid0 >= 0 && varid1 >= 0) {
+	    nct_att* att = nct_get_varatt(vs0->vars[varid0], "units"); // convert timeunits if the dimension is time
+	    if (att)
+		nct_convert_timeunits(vs1->vars[varid1], att->value);
+	    if (!vs0->vars[varid0]->data)
+		nct_load(vs0->vars[varid0]);
+	    if (!vs1->vars[varid1]->data)
+		nct_load(vs1->vars[varid1]);
+	    _nct_concat_var(vs0->vars[varid0], vs1->vars[varid1], dimid0, howmany_left);
+	}
+    }
+
+    /* Concatenate all variables.
+       Called concat-functions change var->len but not vardim->len which has already been changed above
+       so that changes would not cumulate when having multiple variables. */
+    int iloop = 0;
+    nct_var* var0 = varids0 ? vs0->vars[varids0[iloop]] : nct_firstvar(vs0);
+    do {
+	nct_var* var1 = nct_get_var(vs1, var0->name);
+	if (!var1)
+	    continue;
+	if (nct_get_vardimid(var0, dimid0) < 0)
+	    _nct_concat_handle_new_dim(var0, vs1);
+	if (var0->endpos < var0->len)
+	    /* To be concatenated when loaded. */
+	    nct_set_concat(var0, var1, howmany_left);
+	else {
+	    /* Concatenate now. */
+	    if(var1->endpos-var1->startpos < var1->len)
+		nct_load(var1); // Now data is written here and copied to var0. Not good.
+	    _nct_concat_var(var0, var1, dimid0, howmany_left);
+	}
+    }
+    while (++iloop != nvars && (
+	    (varids0 && (var0 = vs0->vars[varids0[iloop]])) ||
+	    (var0 = nct_nextvar(var0))));
+
+    if (howmany_left == 0)
+	_nct_concat_handle_new_dim(NULL, NULL); // to reset the dimension to be added
+    return vs0;
+}
+
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
-    int dimid0, dimid1, varid0=0, varid1;
     if (!dimname)
 	dimname = "-0";
     if (dimname[0] == '-') {
+	int dimid0;
 	/* A number tells which vardim to concatenate along. Defined based on the dimensions of the first var. */
 	if (sscanf(dimname+1, "%i", &dimid0) == 1) {
 	    nct_foreach(vs0, v)
@@ -348,7 +449,6 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 	}
 	/* Not a concatenation but useful. */
 	else if (!strcmp(dimname, "-v")) {
-	    varid1=-1;
 	    nct_foreach(vs1, var1) {
 		nct_load(var1);
 		nct_var* var = nct_copy_var(vs0, var1, 1);
@@ -360,71 +460,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 	else
 	    dimname++; // don't include the hyphen
     }
-    /* Now dimname is either an existing dimension or one to be created. */
-    dimid0 = nct_get_dimid(vs0, dimname);
-    if (dimid0 < 0)
-	dimid0 = nct_dimid(nct_add_dim(vs0, 1, dimname));
-    /* We assume that zero length dimension does not belong to any variable yet and is safe to change to one. */
-    else if (vs0->dims[dimid0]->len == 0) {
-	nct_var* dim = vs0->dims[dimid0];
-	dim->len = 1;
-	if (nct_iscoord(dim)) {
-	    nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
-	    memset(dim->data, 0, nctypelen(dim->dtype));
-	}
-    }
-    /* The dimension exists now in vs0 but not necessarily in vs1. */
-    dimid1 = nct_get_dimid(vs1, dimname);
-    if (dimid1 < 0)
-	vs0->dims[dimid0]->len++;
-    else {
-	if (vs1->dims[dimid1]->len == 0) {
-	    nct_var* dim = vs1->dims[dimid1];
-	    dim->len = 1;
-	    if (nct_iscoord(dim)) {
-		nct_allocate_varmem(dim); // There is no data, but not having memory might be an error.
-		memset(dim->data, 0, nctypelen(dim->dtype));
-	    }
-	}
-	vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
-	/* If the dimension is also a variable, concat that */
-	if((varid0=nct_get_varid(vs0, dimname)) >= 0 &&
-	   (varid1=nct_get_varid(vs1, dimname)) >= 0)
-	{
-	    nct_att* att = nct_get_varatt(vs0->vars[varid0], "units"); // convert timeunits if the dimension is time
-	    if (att)
-		nct_convert_timeunits(vs1->vars[varid1], att->value);
-	    if (!vs0->vars[varid0]->data)
-		nct_load(vs0->vars[varid0]);
-	    if (!vs1->vars[varid1]->data)
-		nct_load(vs1->vars[varid1]);
-	    _nct_concat_var(vs0->vars[varid0], vs1->vars[varid1], dimid0, howmany_left);
-	}
-    }
-    /* Finally concatenate all variables.
-       Called concat-functions change var->len but not vardim->len which has already been changed here
-       so that changes would not cumulate when having multiple variables. */
-    //nct_foreach(vs0, var0) {
-    int iloop = 0;
-    nct_var* var0 = varids0 ? vs0->vars[varids0[iloop]] : nct_firstvar(vs0);
-    do {
-	nct_var* var1 = nct_get_var(vs1, var0->name);
-	if (nct_get_vardimid(var0, dimid0) < 0) // TODO: Why do we need this before continue?
-	    nct_add_vardim_first(var0, dimid0);
-	if (!var1)
-	    continue;
-	if (var0->endpos < var0->len)
-	    nct_set_concat(var0, var1, howmany_left);
-	else {
-	    if(var1->endpos-var1->startpos < var1->len)
-		nct_load(var1); // Now data is written here and copied to var0. Not good.
-	    _nct_concat_var(var0, var1, dimid0, howmany_left);
-	}
-    }
-    while (++iloop != nvars && (
-	    (varids0 && (var0 = vs0->vars[varids0[iloop]])) ||
-	    (var0 = nct_nextvar(var0))));
-    return vs0;
+    return nct_concat_varids_name(vs0, vs1, dimname, howmany_left, varids0, nvars);
 }
 
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left) {
