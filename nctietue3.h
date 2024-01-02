@@ -174,6 +174,8 @@ struct nct_anyd {
 #define nct_dimid(var) ((var)->id_dim-1)
 #define nct_varid_(loc) (loc+1)
 #define nct_dimid_(loc) (loc+1)
+#define nct_get_var_id(set, id) ((set)->vars[(id)-1])
+#define nct_get_dim_id(set, id) ((set)->dims[(id)-1])
 #define nct_iscoord(var) ((var)->id_dim && (var)->id_var)
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
@@ -277,6 +279,8 @@ void		nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // c
 size_t		nct_get_ind_from_coords(const nct_var* var, const size_t* coord);
 nct_att*	nct_get_varatt(const nct_var* var, const char* name);
 char*		nct_get_varatt_text(const nct_var*, const char*);
+double		nct_get_varatt_floating(const nct_var *var, const char *name, int ind);
+long long	nct_get_varatt_integer(const nct_var *var, const char *name, int ind);
 nct_var*	nct_get_dim(const nct_set* set, const char* name);
 nct_var*	nct_get_var(const nct_set* set, const char* name);
 nct_var*	nct_get_vardim(const nct_var* var, int num);
@@ -404,6 +408,7 @@ void nct_print_datum(nc_type, const void*);
 void nct_print_datum_at(nc_type, const void* vdatum, long pos);
 void nct_print_att(nct_att*, const char* indent);
 void nct_print_var(nct_var*, const char* indent);
+void nct_print_var_meta(const nct_var* var, const char* indent);
 void nct_print_dim(nct_var*, const char* indent);
 void nct_print(nct_set*);
 

@@ -30,7 +30,7 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 #define print_varerror(var, indent)  do {	\
     FILE* tmp = stdout;				\
     stdout = nct_stderr? nct_stderr: stderr;	\
-    nct_print_var(var, indent);			\
+    nct_print_var_meta(var, indent);		\
     stdout = tmp;				\
 } while(0)
 
@@ -290,6 +290,7 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
     memmove(var->dimids+1, var->dimids, var->ndims*sizeof(int));
     var->dimids[0] = dimid;
     var->ndims++;
+    var->len *= nct_get_dim_id(var->super, dimid)->len;
     return var;
 }
 
@@ -325,7 +326,7 @@ void nct_allocate_varmem(nct_var* var) {
 }
 
 /* A new dimension needs to be added only to the first set. */
-nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation) {
+static nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation) {
     static nct_var *dim;
     static nct_set *previous_concatenation;
     if (!var) {
@@ -981,6 +982,26 @@ nct_att* nct_get_varatt(const nct_var* var, const char* name) {
     return NULL;
 }
 
+double nct_get_varatt_floating(const nct_var *var, const char *name, int ind) {
+    nct_att *att = nct_get_varatt(var, name);
+    if (!att) {
+	nct_puterror("attribute %s not found:", name);
+	print_varerror(var, "    ");
+	nct_return_error(NAN);
+    }
+    return nct_get_floating_from(att->dtype, att->value, ind);
+}
+
+long long nct_get_varatt_integer(const nct_var *var, const char *name, int ind) {
+    nct_att *att = nct_get_varatt(var, name);
+    if (!att) {
+	nct_puterror("attribute %s not found:\n", name);
+	print_varerror(var, "    ");
+	nct_return_error(0);
+    }
+    return nct_get_integer_from(att->dtype, att->value, ind);
+}
+
 char* nct_get_varatt_text(const nct_var* var, const char* name) {
     int natts = var->natts;
     for(int i=0; i<natts; i++)
@@ -1405,9 +1426,7 @@ void nct_print_atts(nct_var* var, const char* indent0, const char* indent1) {
 	nct_print_att(var->atts + i, inde);
 }
 
-void nct_print_var(nct_var* var, const char* indent) {
-    if (!nct_get_var(var->super, var->name))
-	return nct_print_dim(var, indent);
+void nct_print_var_meta(const nct_var* var, const char* indent) {
     printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
 	   nct_varname_color, var->name, var->len, nct_default_color,
@@ -1417,6 +1436,12 @@ void nct_print_var(nct_var* var, const char* indent) {
 	printf("%s(%zu), ", dim->name, dim->len);
     }
     printf(")\n");
+}
+
+void nct_print_var(nct_var* var, const char* indent) {
+    if (!nct_get_var(var->super, var->name))
+	return nct_print_dim(var, indent);
+    nct_print_var_meta(var, indent);
     printf("%s  [", indent);
     nct_print_data(var);
     puts("]");
