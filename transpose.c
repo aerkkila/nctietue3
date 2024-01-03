@@ -21,6 +21,12 @@ _makedim(void* new, const void* old, size_t size1,
 }
 
 nct_var* nct_transpose_order_ptr(nct_var* var, const int* order) {
+    for (int i=0; i<var->ndims; i++)
+	if (order[i] != i)
+	    goto action_needed;
+    return var;
+
+action_needed:
     int size1 = nctypelen(var->dtype);
     void* new = malloc(var->len*size1);
     if (!new) {
