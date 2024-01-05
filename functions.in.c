@@ -13,6 +13,22 @@
 #define form @form
 #define __nctype__ @nctype
 
+#if __nctype__ == NC_FLOAT
+static int my_isnan_float(float f) {
+    const unsigned exponent = ((1u<<31)-1) - ((1u<<(31-8))-1);
+    uint32_t bits;
+    memcpy(&bits, &f, 4);
+    return (bits & exponent) == exponent;
+}
+#elif __nctype__ == NC_DOUBLE
+static int my_isnan_double(double f) {
+    const long unsigned exponent = ((1lu<<63)-1) - ((1lu<<(63-11))-1);
+    uint64_t bits;
+    memcpy(&bits, &f, 8);
+    return (bits & exponent) == exponent;
+}
+#endif
+
 void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
 
 static void nct_print_datum_@nctype(const void* vdatum) {
@@ -223,14 +239,16 @@ void* nct_minmax_at_@nctype(const nct_var* var, long start, long end, void* vres
 #if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
     maxval = -INFINITY;
     minval = INFINITY;
-    for(int i=start; i<end; i++)
+    for (int i=start; i<end; i++)
+	if (my_isnan_@ctype(((ctype*)var->data)[i])); // tarpeellinen Ofast-optimoinnilla
 #else
     maxval = minval = ((ctype*)var->data)[start];
-    for(int i=start+1; i<end; i++)
+    for (int i=start+1; i<end; i++)
+	if (0);
 #endif
-	if(maxval < ((ctype*)var->data)[i])
+	else if (maxval < ((ctype*)var->data)[i])
 	    maxval = ((ctype*)var->data)[i];
-	else if(minval > ((ctype*)var->data)[i])
+	else if (minval > ((ctype*)var->data)[i])
 	    minval = ((ctype*)var->data)[i];
     result[0] = minval;
     result[1] = maxval;
