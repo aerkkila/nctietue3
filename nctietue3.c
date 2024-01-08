@@ -1632,14 +1632,27 @@ nct_set* nct_read_ncf_gd(nct_set* s, const void* vfile, int flags) {
    */
 
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* dim) {
-    return nct_read_mfnc_regex_(filename, regex_cflags, dim, NULL, NULL, 0, 0, NULL);
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, dim, NULL, NULL, 0, 0, NULL);
 }
 
 nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* dim, void *strcmpfun) {
-    return nct_read_mfnc_regex_(filename, regex_cflags, dim, strcmpfun, NULL, 0, 0, NULL);
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, dim, strcmpfun, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfncf_regex(const char* filename, int readflags, int regex_cflags, char* dim) {
+    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, dim, NULL, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfncf_regex_strcmp(const char* filename, int readflags, int regex_cflags, char* dim, void *strcmpfun) {
+    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, dim, strcmpfun, NULL, 0, 0, NULL);
 }
 
 nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim, void *strcmpfun_for_sorting,
+	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, dim, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
+}
+
+nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cflags, char* dim, void *strcmpfun_for_sorting,
 	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
     char* names = nct__get_filenames_(filename, 0, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
@@ -1658,13 +1671,17 @@ nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* dim,
 	nct_puterror("No files match \"%s\"\n", filename);
 	nct_return_error(NULL);
     }
-    nct_set* s = nct_read_mfnc_ptr(names, num, dim);
+    nct_set* s = nct_read_mfncf_ptr(names, readflags, num, dim);
     free(names);
     return s;
 }
 
-/* filenames has the form of "name1\0name2\0name3\0last_name\0\0" */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* dim) {
+    return nct_read_mfncf_ptr(filenames, nct_readflags, nfiles, dim);
+}
+
+/* filenames has the form of "name1\0name2\0name3\0last_name\0\0" */
+nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int nfiles, char* dim) {
     const char* ptr = filenames;
     /* nfiles is just a hint. If necessary, it can be calculated. */
     if (nfiles<0) {
@@ -1683,18 +1700,18 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* dim) {
     ptr = filenames;
 
     nct_set *set, *setptr;
-    if (!(nct_readflags & nct_rnoall))
+    if (!(readflags & nct_rnoall))
 	goto read_and_load;
 
     /* No loading data. Making list of nct_set* and setting right loading rules. */
     set = setptr = calloc(nfiles+1, sizeof(nct_set)); // +1 for NULL-termination
-    nct_read_nc_gd(set, ptr);
+    nct_read_ncf_gd(set, ptr, readflags);
     set->owner = 1;
     nfiles--;
     setrule(set, nct_r_list); // so that nct_free knows to free other members as well
     ptr += strlen(ptr)+1;
     while (*ptr) {
-	nct_read_nc_gd(++setptr, ptr);
+	nct_read_ncf_gd(++setptr, ptr, readflags);
 	nct_concat(set, setptr, dim, --nfiles);
 	ptr += strlen(ptr)+1;
     }
@@ -1707,7 +1724,7 @@ read_and_load:
     nfiles--;
     ptr += strlen(ptr)+1;
     while (*ptr) {
-	nct_readm_nc(set1, ptr);
+	nct_readm_ncf(set1, ptr, readflags);
 	nct_concat(set, &set1, dim, --nfiles);
 	nct_free1(&set1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
 	ptr += strlen(ptr)+1;
@@ -1716,6 +1733,10 @@ read_and_load:
 }
 
 nct_set* nct_read_mfnc_ptrptr(char** filenames, int nfiles, char* dim) {
+    return nct_read_mfncf_ptrptr(filenames, nct_readflags, nfiles, dim);
+}
+
+nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char* dim) {
     int len = 0;
     int n = 0;
     while (n!=nfiles && filenames[n]) {
@@ -1730,7 +1751,7 @@ nct_set* nct_read_mfnc_ptrptr(char** filenames, int nfiles, char* dim) {
 	ptr += a;
     }
     *ptr = 0;
-    nct_set* set = nct_read_mfnc_ptr(files, n, dim);
+    nct_set* set = nct_read_mfncf_ptr(files, readflags, n, dim);
     free(files);
     return set;
 }

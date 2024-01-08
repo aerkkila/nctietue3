@@ -6,6 +6,7 @@
 #include <stdio.h>	// stderr
 #include <stddef.h>	// NULL
 #include <regex.h>	// regmatch_t
+#include <stdint.h>	// intptr_t
 
 typedef struct nct_set nct_set;
 typedef struct nct_var nct_var;
@@ -509,6 +510,7 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type typ
 nct_set* nct_read_ncf(const void* file, int readflags);
 nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
+/* Same as below but without readflags. */
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
 nct_set* nct_read_mfnc_regex_strcmp(const char* filename_regex, int regex_cflags, char* concatdim, void *strcmpfun);
 /* See comment on nct__get_filenames. */
@@ -532,6 +534,31 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
    This calls nct_read_mfnc_ptr after having converted filenames into form of its argument. */
 nct_set* nct_read_mfnc_ptrptr(char** filenames, int n, char* concatdim);
+
+nct_set* nct_read_mfncf_regex(const char* filename_regex, int readflags, int regex_cflags, char* concatdim);
+nct_set* nct_read_mfncf_regex_strcmp(const char* filename_regex, int readflags, int regex_cflags, char* concatdim, void *strcmpfun);
+/* See comment on nct__get_filenames. */
+nct_set* nct_read_mfncf_regex_(
+	const char*	filename,
+	int		readflags,
+	int		regex_cflags,
+	char*		concatdim,
+	void*		strcmpfun,
+	void (*matchfun)(
+	    const char* restrict,	// filename
+	    int,			// nmatch
+	    regmatch_t*,		// match
+	    void*			// data out
+	    ),
+	int	size1,
+	int	nmatches,
+	void**	matchdest
+	);
+/* filenames must be in the form of the result of nct__get_filenames. */
+nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int n, char* concatdim);
+/* If n is negative, then filenames must be null-terminated.
+   This calls nct_read_mfnc_ptr after having converted filenames into form of its argument. */
+nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int n, char* concatdim);
 
 nct_var* nct_rename(nct_var*, char*, int freeable);
 
