@@ -484,17 +484,10 @@ struct nct_readmem_t {
  * 	Filetype is netcdf.
  * default:
  * 	Other filetypes can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
- *
- * nct_rregex:
- *	Filename argument to nct_read_* functions are struct nct_fileinfo_t* (see also nct_rmem flag).
- *	Probably no need to ever set this flag manually.
- *	Used automatically from nct_read_mfnc_regex, etc.
- * default:
- *	The filename argument is the name of the file to be read.
  */
 enum {
     nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
-    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rregex=1<<7,
+    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6,
 };
 extern int nct_readflags;
 
