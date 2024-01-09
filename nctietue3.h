@@ -109,6 +109,7 @@ union nct_any {
 struct nct_fileinfo_t {
     const char *name;
     regmatch_t *groups;
+    int dirnamelen;
 };
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
@@ -298,6 +299,7 @@ size_t		nct_get_len_from(const nct_var*, int startdim);
 long		nct_get_interval_ms(int timeunit_enumeration); // argument can be nct_mktime(args).d
 FILE*		nct_get_stream(const nct_var*);
 const char*	nct_get_filename(const nct_set*);
+const char*	nct_get_filename_capture(const nct_set* set, int igroup, int *capture_len); // regex capture groups
 double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
 double		nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
 double		nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
@@ -716,6 +718,7 @@ struct nct_get_filenames_args {
     int size1dest, nmatch;
     void **dest;
     regmatch_t ***groups_dest;
+    int *dirnamelen;
 };
 
 char* nct__get_filenames_(struct nct_get_filenames_args);

@@ -435,6 +435,49 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
     return vs0;
 }
 
+char* _makename_concat_v(nct_var *var, const char* args) {
+    int capac = 256, newlen=0;
+    char *new = malloc(capac);
+
+    while (*args) {
+	if (*args != '$') {
+	    if (newlen+1 < capac)
+		new = realloc(new, capac = newlen+256);
+	    new[newlen++] = *args++;
+	}
+	else {
+	    args++;
+	    int num = 0;
+	    const char *copy = NULL;
+	    int copylen;
+	    while (1) {
+		if ('0' <= *args && *args <= '9') {
+		    num = num*10 + *args-'0';
+		    args++;
+		    continue; }
+		else if (*args == '@')
+		    copy = var->name;
+		else if (*args == '$')
+		    copy = "$";
+		else if (num) {
+		    copy = nct_get_filename_capture(var->super, num, &copylen);
+		    goto come_from_num;
+		}
+		break;
+	    }
+	    copylen = strlen(copy);
+	    args++;
+come_from_num:
+	    if (newlen + copylen < capac)
+		new = realloc(new, capac = newlen+copylen+256);
+	    memcpy(new+newlen, copy, copylen);
+	    newlen += copylen;
+	}
+    } // while (*args)
+    new[newlen] = '\0';
+    return new;
+}
+
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
     if (!dimname)
 	dimname = "-0";
@@ -449,13 +492,25 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		}
 	}
 	/* Not a concatenation but useful. */
-	else if (!strcmp(dimname, "-v")) {
+	else if (!strncmp(dimname, "-v", 2)) {
 	    nct_foreach(vs1, var1) {
 		nct_load(var1);
+		if (dimname[2] == ':') {
+		    char *name = _makename_concat_v(var1, dimname+3);
+		    nct_rename(var1, name, 1);
+		}
 		nct_var* var = nct_copy_var(vs0, var1, 1);
 		var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
 		nct_ensure_unique_name(var);
 	    }
+	    /* The first set should also be renamed similarily but only once. */
+	    if (dimname[2] == ':' && howmany_left == 0)
+		nct_foreach(vs0, var) {
+		    if (var->ncid < 0) // Whether this is a concatenated variable or original in vs0.
+			break;
+		    char *name = _makename_concat_v(var, dimname+3);
+		    nct_rename(var, name, 1);
+		}
 	    return vs0;
 	}
 	else
@@ -1266,6 +1321,14 @@ const char* nct_get_filename(const nct_set* set) {
     return ((struct nct_fileinfo_t*)set->fileinfo)->name;
 }
 
+/* uses private nct_set.fileinfo */
+const char* nct_get_filename_capture(const nct_set* set, int igroup, int *capture_len) {
+    struct nct_fileinfo_t *info = set->fileinfo;
+    regmatch_t *match = info->groups + igroup;
+    *capture_len = match->rm_eo - match->rm_so;
+    return info->name + info->dirnamelen + match->rm_so;
+}
+
 nct_var* nct_load_stream(nct_var* var, size_t len) {
     int len0 = var->len;
     var->len = len;
@@ -1646,71 +1709,13 @@ nct_set* nct_read_ncf_gd(nct_set* s, const void* vfile, int flags) {
    these create null-terminated list nct_set* and return pointer to the first member.
    */
 
-nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concat_args) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
-}
-
-nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
-}
-
-nct_set* nct_read_mfncf_regex(const char* filename, int readflags, int regex_cflags, char* concat_args) {
-    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
-}
-
-nct_set* nct_read_mfncf_regex_strcmp(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun) {
-    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
-}
-
-nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
-	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
-}
-
-nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
-	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    regmatch_t **groups = NULL;
-    char *names = nct__get_filenames_((struct nct_get_filenames_args){
-	.regex = filename,
-	.regex_cflags = regex_cflags,
-	.strcmpfun_for_sorting = strcmpfun_for_sorting,
-	.fun = matchfun,
-	.size1dest = size1,
-	.nmatch = nmatch,
-	.dest = matchdest,
-	.groups_dest = &groups,
-	});
-    int num = nct__getn_filenames(); // returns the number of files read on previous call
-    if (nct_verbose) {
-	char* str = names;
-	printf("match from %s:", filename);
-	verbose_line_ending();
-	while (*str) {
-	    printf("%s", str);
-	    verbose_line_ending();
-	    str += strlen(str) + 1;
-	}
-    }
-    if (num == 0) {
-	free(names);
-	nct_puterror("No files match \"%s\"\n", filename);
-	nct_return_error(NULL);
-    }
-    nct_set* s = nct_read_mfncf_ptr(names, readflags, num, concat_args);
-    if (groups)
-	for (int i=0; i<num; i++)
-	    ((struct nct_fileinfo_t*)s[i].fileinfo)->groups = groups[i];
-    free(groups);
-    free(names);
-    return s;
-}
-
 nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* concat_args) {
     return nct_read_mfncf_ptr(filenames, nct_readflags, nfiles, concat_args);
 }
 
 /* filenames has the form of "name1\0name2\0name3\0last_name\0\0" */
-nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int nfiles, char* concat_args) {
+nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, char* concat_args,
+	regmatch_t **groups, int dirnamelen) {
     const char* ptr = filenames;
     /* nfiles is just a hint. If necessary, it can be calculated. */
     if (nfiles<0) {
@@ -1736,11 +1741,18 @@ nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int nfiles, ch
     set = setptr = calloc(nfiles+1, sizeof(nct_set)); // +1 for NULL-termination
     nct_read_ncf_gd(set, ptr, readflags);
     set->owner = 1;
+    if (groups)
+	((struct nct_fileinfo_t*)set->fileinfo)->groups = groups[0];
+    ((struct nct_fileinfo_t*)set->fileinfo)->dirnamelen = dirnamelen;
+    int ind = 0;
     nfiles--;
     setrule(set, nct_r_list); // so that nct_free knows to free other members as well
     ptr += strlen(ptr)+1;
     while (*ptr) {
 	nct_read_ncf_gd(++setptr, ptr, readflags);
+	if (groups)
+	    ((struct nct_fileinfo_t*)setptr->fileinfo)->groups = groups[++ind];
+	((struct nct_fileinfo_t*)setptr->fileinfo)->dirnamelen = dirnamelen;
 	nct_concat(set, setptr, concat_args, --nfiles);
 	ptr += strlen(ptr)+1;
     }
@@ -1752,14 +1764,26 @@ read_and_load:
     set->owner = 1;
     nfiles--;
     ptr += strlen(ptr)+1;
+    if (groups)
+	((struct nct_fileinfo_t*)set->fileinfo)->groups = groups[0];
+    ((struct nct_fileinfo_t*)set->fileinfo)->dirnamelen = dirnamelen;
+    ind = 0;
     while (*ptr) {
 	nct_readm_ncf(set1, ptr, readflags);
+	if (groups)
+	    ((struct nct_fileinfo_t*)set1.fileinfo)->groups = groups[++ind];
+	((struct nct_fileinfo_t*)set1.fileinfo)->dirnamelen = dirnamelen;
 	nct_concat(set, &set1, concat_args, --nfiles);
 	nct_free1(&set1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
 	ptr += strlen(ptr)+1;
     }
     return set;
 }
+
+nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int nfiles, char* concat_args) {
+    return nct_read_mfncf_ptr1(filenames, readflags, nfiles, concat_args, NULL, 0);
+}
+
 
 nct_set* nct_read_mfnc_ptrptr(char** filenames, int nfiles, char* concat_args) {
     return nct_read_mfncf_ptrptr(filenames, nct_readflags, nfiles, concat_args);
@@ -1785,6 +1809,68 @@ nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char
     return set;
 }
 
+nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concat_args) {
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun) {
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfncf_regex(const char* filename, int readflags, int regex_cflags, char* concat_args) {
+    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfncf_regex_strcmp(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun) {
+    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
+}
+
+nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
+	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
+    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
+}
+
+nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
+	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
+    regmatch_t **groups = NULL;
+    int dirnamelen = 0;
+
+    char *names = nct__get_filenames_((struct nct_get_filenames_args){
+	.regex = filename,
+	.regex_cflags = regex_cflags,
+	.strcmpfun_for_sorting = strcmpfun_for_sorting,
+	.fun = matchfun,
+	.size1dest = size1,
+	.nmatch = nmatch,
+	.dest = matchdest,
+	.groups_dest = &groups,
+	.dirnamelen = &dirnamelen,
+	});
+
+    int num = nct__getn_filenames(); // returns the number of files read on previous call
+    if (nct_verbose) {
+	char* str = names;
+	printf("match from %s:", filename);
+	verbose_line_ending();
+	while (*str) {
+	    printf("%s", str);
+	    verbose_line_ending();
+	    str += strlen(str) + 1;
+	}
+    }
+    if (num == 0) {
+	free(names);
+	nct_puterror("No files match \"%s\"\n", filename);
+	nct_return_error(NULL);
+    }
+
+    nct_set* s = nct_read_mfncf_ptr1(names, readflags, num, concat_args, groups, dirnamelen);
+
+    free(groups);
+
+    free(names);
+    return s;
+}
 
 nct_var* nct_rename(nct_var* var, char* name, int freeable) {
     if (var->freeable_name)
@@ -2117,6 +2203,9 @@ char *nct__get_filenames_(struct nct_get_filenames_args args) {
 	*args.groups_dest = saved_groups_sorted;
 	free(saved_groups); // free ptrptr, all single ptrs were copied to sorted ptrptr
     }
+
+    if (args.dirnamelen)
+	*args.dirnamelen = dlen+1;
 
     free(match);
     free(dirname);
