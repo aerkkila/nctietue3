@@ -303,9 +303,9 @@ nct_set* nct_clear(nct_set* set) {
     return set;
 }
 
-void nct_close_nc(nct_set* set) {
-    ncfunk(nc_close, set->ncid);
-    set->ncid = 0;
+void nct_close_nc(int *ncid) {
+    ncfunk(nc_close, *ncid);
+    *ncid = -1;
 }
 
 void nct_allocate_varmem(nct_var* var) {
@@ -494,19 +494,21 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 	/* Not a concatenation but useful. */
 	else if (!strncmp(dimname, "-v", 2)) {
 	    nct_foreach(vs1, var1) {
-		nct_load(var1);
+		// nct_load(var1); // not needed since var->fileinfo was added
 		if (dimname[2] == ':') {
 		    char *name = _makename_concat_v(var1, dimname+3);
 		    nct_rename(var1, name, 1);
 		}
 		nct_var* var = nct_copy_var(vs0, var1, 1);
-		var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
+		var->fileinfo = var1->super->fileinfo;
+		((struct nct_fileinfo_t*)var->fileinfo)->nusers++;
+		// var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
 		nct_ensure_unique_name(var);
 	    }
 	    /* The first set should also be renamed similarily but only once. */
 	    if (dimname[2] == ':' && howmany_left == 0)
 		nct_foreach(vs0, var) {
-		    if (var->ncid < 0) // Whether this is a concatenated variable or original in vs0.
+		    if (var->fileinfo) // Whether this is a concatenated variable or original in vs0.
 			break;
 		    char *name = _makename_concat_v(var, dimname+3);
 		    nct_rename(var, name, 1);
@@ -635,6 +637,13 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	    }
 	}
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
+	var->fileinfo = src->fileinfo ? src->fileinfo : src->super->fileinfo;
+	if (var->fileinfo) {
+	    var->fileinfo->nusers++;
+	    var->ncid = src->ncid;
+	    var->nfiledims = src->nfiledims;
+	    memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
+	}
 	var->freeable_name = 1;
     }
 
@@ -901,6 +910,45 @@ static void _nct_free_att(nct_att* att) {
     att->freeable = 0;
 }
 
+void _nct_free(int _, ...) {
+    va_list args;
+    va_start(args, _);
+    intptr_t addr;
+    while((int)(addr = va_arg(args, intptr_t)) != -1)
+	nct_free1((nct_set*)addr);
+    va_end(args);
+}
+
+/* uses private nct_set.fileinfo */
+static void _nct_unlink_fileinfo(struct nct_fileinfo_t *fileinfo) {
+    if (--fileinfo->nusers)
+	return;
+    if (fileinfo->ismem_t) {
+	struct nct_fileinfo_mem_t* info = (void*)fileinfo;
+	if (info->owner & nct_ref_content)
+	    free(info->content);
+	/* If these pragmas come after the if-statement, surrounding only the free-statement,
+	   the if-condition is omitted. Seems like a bug in GCC. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+	if (info->owner & nct_ref_name)
+	    free((char*)info->fileinfo.name);
+#pragma GCC diagnostic pop
+	free(info->fileinfo.groups);
+    }
+    else {
+	/* Always owner unless readmem flags is present. Quite unlogical. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+	free(fileinfo->name);
+#pragma GCC diagnostic pop
+	free(fileinfo->groups);
+    }
+    if (fileinfo->ncid > 0)
+	nct_close_nc(&fileinfo->ncid);
+    free(fileinfo);
+}
+
 static void _nct_free_var(nct_var* var) {
     free(var->dimids);
     for(int i=0; i<var->natts; i++)
@@ -917,42 +965,9 @@ static void _nct_free_var(nct_var* var) {
     if hasrule(var, nct_r_concat)
 	free(var->rule[nct_r_concat].arg.v);
     free(var->stack);
-}
-
-void _nct_free(int _, ...) {
-    va_list args;
-    va_start(args, _);
-    intptr_t addr;
-    while((int)(addr = va_arg(args, intptr_t)) != -1)
-	nct_free1((nct_set*)addr);
-    va_end(args);
-}
-
-/* uses private nct_set.fileinfo */
-static void _nct_free_fileinfo(nct_set* set) {
-    if (hasrule(set, nct_r_mem)) {
-	struct nct_readmem_t* fileinfo = set->fileinfo;
-	if (fileinfo->owner & nct_ref_content)
-	    free(fileinfo->content);
-	/* If these pragmas come after the if-statement, surrounding only the free-statement,
-	   the if-condition is omitted. Seems like a bug in GCC. */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
-	if (fileinfo->owner & nct_ref_name)
-	    free((char*)fileinfo->fileinfo.name);
-#pragma GCC diagnostic pop
-	free(fileinfo->fileinfo.groups);
-    }
-    else {
-	/* Always owner unless readmem flags is present. Quite unlogical. */
-	struct nct_fileinfo_t* fileinfo = set->fileinfo;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
-	free(fileinfo->name);
-#pragma GCC diagnostic pop
-	free(fileinfo->groups);
-    }
-    set->fileinfo = (free(set->fileinfo), NULL);
+    if (var->fileinfo)
+	_nct_unlink_fileinfo(var->fileinfo);
+    var->fileinfo = NULL;
 }
 
 void nct_free1(nct_set* set) {
@@ -981,12 +996,10 @@ void nct_free1(nct_set* set) {
     memset(set->dims, 0, sizeof(void*)*set->ndims);
     free(set->dims);
     startpass;
-    if (set->ncid > 0) {
-	ncfunk(nc_close, set->ncid);
-	set->ncid = 0;
-    }
+    if (set->ncid > 0)
+	nct_close_nc(&set->ncid);
     endpass;
-    _nct_free_fileinfo(set);
+    set->fileinfo = (_nct_unlink_fileinfo(set->fileinfo), NULL);
     if hasrule(set, nct_r_list) {
 	nct_set* ptr = set;
 	nct_set nullset = {0};
@@ -1262,44 +1275,76 @@ int nct_link_stream(nct_var* dest, nct_var* src) {
     return 0;
 }
 
-static int nct_open_mem(struct nct_readmem_t*);
+static int nct_open_mem(struct nct_fileinfo_mem_t*);
 
 /* No need to call outside perhaps_close_the_file */
-static void perhaps_free_the_content(struct nct_readmem_t* info) {
-    if (!(nct_readflags & nct_rkeepmem) && info->owner & nct_ref_content)
+static void perhaps_free_the_content(struct nct_fileinfo_mem_t* info) {
+    if (!(nct_readflags & (nct_rkeepmem|nct_rkeep)) && info->owner & nct_ref_content)
 	info->content = (free(info->content), NULL);
 }
 
 /* uses private nct_set.fileinfo */
-static void perhaps_close_the_file(nct_set* set) {
-    if (set->ncid <= 0 || nct_readflags & nct_rkeep)
-	return;
-    nct_close_nc(set);
+static void perhaps_close_the_file(nct_var* var) {
+    int *ncidp;
+    if (var->fileinfo) {
+	ncidp = &var->fileinfo->ncid;
+	if (var->fileinfo->ismem_t)
+	    perhaps_free_the_content((void*)var->fileinfo);
+    }
+    else {
+	ncidp = nct_readflags & nct_rkeep ? NULL : &var->super->ncid;
+	if (hasrule(var->super, nct_r_mem))
+	    perhaps_free_the_content(var->super->fileinfo);
+    }
+    if (ncidp && *ncidp > 0)
+	nct_close_nc(ncidp);
+}
+
+static void perhaps_close_the_file_set(nct_set* set) {
+    int *ncidp;
+    ncidp = nct_readflags & nct_rkeep ? NULL : &set->ncid;
     if (hasrule(set, nct_r_mem))
 	perhaps_free_the_content(set->fileinfo);
+    if (ncidp && *ncidp > 0)
+	nct_close_nc(ncidp);
 }
 
 /* uses private nct_set.fileinfo */
-static void perhaps_open_the_file(nct_var* var) {
-    if (var->super->ncid > 0 || !var->super->fileinfo)
-	return;
-    if (hasrule(var->super, nct_r_mem)) {
-	struct nct_readmem_t* info = var->super->fileinfo;
-	var->super->ncid = nct_open_mem(info);
+static int perhaps_open_the_file(nct_var* var) {
+    struct nct_fileinfo_t *info;
+    if (var->fileinfo) {
+	info = var->fileinfo;
+	if (info->ncid <= 0) {
+	    if (info->ismem_t)
+		info->ncid = nct_open_mem((void*)info);
+	    else
+		ncfunk_open(info->name, NC_NOWRITE, &info->ncid);
+	}
+	return info->ncid;
     }
+    else if (var->super->ncid >= 0)
+	return var->super->ncid;
+
+    if (!var->super->fileinfo)
+	return -1;
+
+    info = var->super->fileinfo;
+    if (info->ismem_t)
+	var->super->ncid = nct_open_mem((void*)info);
     else
 	ncfunk_open(nct_get_filename(var->super), NC_NOWRITE, &var->super->ncid);
+    return var->super->ncid;
 }
 
 /* No need to call outside nct_open_mem. */
-static void perhaps_load_the_content(struct nct_readmem_t* info) {
+static void perhaps_load_the_content(struct nct_fileinfo_mem_t* info) {
     if (info->content)
 	return;
     info->content = info->getcontent(info->fileinfo.name, &info->size);
     info->owner |= nct_ref_content;
 }
 
-static int nct_open_mem(struct nct_readmem_t* params) {
+static int nct_open_mem(struct nct_fileinfo_mem_t* params) {
     int ncid;
     perhaps_load_the_content(params);
     if ((nct_ncret = nc_open_mem(params->fileinfo.name, NC_NOWRITE, params->size, params->content, &ncid))) {
@@ -1566,7 +1611,7 @@ static nct_set* nct_after_lazyread(nct_set* s, int flags) {
 
 end:
     nct_readflags = old;
-    perhaps_close_the_file(s);
+    perhaps_close_the_file_set(s);
     return s;
 }
 
@@ -1633,10 +1678,11 @@ static nct_set* _read_unknown_format(nct_set* dest, const char* name, int flags)
 /* Uses private nct_set.fileinfo. This is the core reading function. */
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags) {
     int ncid, ndims, nvars;
-    struct nct_readmem_t *fileinfo;
+    struct nct_fileinfo_mem_t *fileinfo;
     if (flags & nct_rmem) {
-	fileinfo = malloc(sizeof(struct nct_readmem_t));
-	memcpy(fileinfo, vfile, sizeof(struct nct_readmem_t));
+	fileinfo = malloc(sizeof(struct nct_fileinfo_mem_t));
+	memcpy(fileinfo, vfile, sizeof(struct nct_fileinfo_mem_t));
+	fileinfo->fileinfo.ismem_t = 1;
 	if (!(fileinfo->owner & nct_ref_name)) {
 	    fileinfo->fileinfo.name = strdup(fileinfo->fileinfo.name);
 	    fileinfo->owner |= nct_ref_name;
@@ -1650,6 +1696,7 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
     }
     else // If another filetype isn't recognized, calls this function again with flags|nct_rnetcdf.
 	return _read_unknown_format(dest, vfile, flags);
+    fileinfo->fileinfo.nusers = 1;
     ncfunk(nc_inq_ndims, ncid, &ndims);
     ncfunk(nc_inq_nvars, ncid, &nvars);
     *dest = (nct_set){

@@ -106,10 +106,21 @@ union nct_any {
     time_t t;
 };
 
-struct nct_fileinfo_t {
+struct nct_fileinfo_t{
     const char *name;
-    regmatch_t *groups;
     int dirnamelen;
+    regmatch_t *groups;
+    int ncid, ismem_t, nusers; // ncid is only used if variable has a separate fileinfo
+};
+
+/* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
+   It could be for example nct__lz4_getcontent. */
+struct nct_fileinfo_mem_t {
+    struct nct_fileinfo_t fileinfo;
+    size_t size;	// size of the file in bytes
+    void* content;	// content of the file
+    unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
+    void* (*getcontent)(const char* filename, size_t* size_out);
 };
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
@@ -155,6 +166,8 @@ struct nct_var {
     nct_rule	rule[nct_r_nrules];
     int		stackbytes, stackcapasit;
     void*	stack;
+    /* private */
+    struct nct_fileinfo_t*	fileinfo; // only used in some cases if different from this->super->fileinfo
 };
 
 struct nct_set {
@@ -166,7 +179,7 @@ struct nct_set {
     nct_att*	atts;
     int		ncid, owner;
     /* private */
-    void*	fileinfo;	// either char* filename or struct nct_readmem_t*
+    void*	fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
     unsigned	rules;		// a bitmask of rules which are in use
 };
 
@@ -195,7 +208,7 @@ nct_att* nct_add_varatt(nct_var* var, nct_att* att);
 nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
-void nct_close_nc(nct_set*); // calls nc_close(set->ncid)
+void nct_close_nc(int *ncid); // calls nc_close(ncid)
 
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars);
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
@@ -433,16 +446,6 @@ unsigned long long*	nct_range_NC_UINT64(unsigned long long i0, unsigned long lon
 double*			nct_range_NC_DOUBLE(double i0, double i1, double gap);
 float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
 
-/* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
-   It could be for example nct__lz4_getcontent. */
-struct nct_readmem_t {
-    struct nct_fileinfo_t fileinfo;
-    size_t size;	// size of the file in bytes
-    void* content;	// content of the file
-    unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
-    void* (*getcontent)(const char* filename, size_t* size_out);
-};
-
 /* How nct_read_nc behaves:
  * nct_rlazy:
  *	Data is not loaded nor memory allocated.
@@ -470,7 +473,7 @@ struct nct_readmem_t {
  *	Files are closed after the first read call and reopened on nct_load.
  *
  * nct_rmem:
- *	The filename argument to nct_read_* functions are a struct nct_readmem_t*.
+ *	The filename argument to nct_read_* functions are a struct nct_fileinfo_mem_t*.
  *	Cannot be used without nct_rkeep, which will be automatically added to readflags.
  * default:
  *	The filename argument is the name of the file to be read.
@@ -478,7 +481,7 @@ struct nct_readmem_t {
  * nct_rkeepmem:
  *	FIXME: Works properly only if added to global nct_readflags.
  * 	Meaningful only with nct_rmem.
- * 	Read memfiles are kept in memory. See also nct_readmem_t.owner.
+ * 	Read memfiles are kept in memory. See also nct_fileinfo_mem_t.owner.
  * default:
  * 	The file content is freed when the netcdf file is closed and reloaded when the file is reopened.
  *

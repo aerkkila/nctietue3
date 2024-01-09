@@ -168,12 +168,12 @@ error:
 static void load_for_real(nct_var* var, loadinfo_t* info) {
     if (hasrule(var, nct_r_stream))
 	return load_stream(var, info);
-    perhaps_open_the_file(var);
+    int ncid = perhaps_open_the_file(var);
     if (var->nfiledims == 0)
-	ncfunk(info->getfun_full, var->super->ncid, var->ncid, info->data);
+	ncfunk(info->getfun_full, ncid, var->ncid, info->data);
     else
-	ncfunk(info->getfun, var->super->ncid, var->ncid, info->fstart, info->fcount, info->data);
-    perhaps_close_the_file(var->super);
+	ncfunk(info->getfun, ncid, var->ncid, info->fstart, info->fcount, info->data);
+    perhaps_close_the_file(var);
 }
 
 static size_t limit_rectangle(size_t* rect, int ndims, size_t maxsize) {
@@ -290,9 +290,9 @@ static nct_var* load_coordinate_var(nct_var* var) {
 	var->data = realloc(var->data, len*size1);
 	var->capacity = len;
     }
-    perhaps_open_the_file(var);
-    ncfunk(getfulldata, var->super->ncid, var->ncid, var->data);
-    perhaps_close_the_file(var->super);
+    int ncid = perhaps_open_the_file(var);
+    ncfunk(getfulldata, ncid, var->ncid, var->data);
+    perhaps_close_the_file(var);
     var->startpos = 0;
     var->endpos = var->len;
     var->data += var->rule[nct_r_start].arg.lli * size1;
@@ -348,7 +348,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 /* Uses private nct_set.fileinfo. */
 int nct_loadable(const nct_var* var) {
     return
-	(var->ncid>=0 && ((var)->super->ncid > 0 || var->super->fileinfo)) ||
+	(var->ncid>=0 && ((var)->super->ncid > 0 || var->super->fileinfo || var->fileinfo)) ||
 	hasrule(var, nct_r_stream);
 }
 
