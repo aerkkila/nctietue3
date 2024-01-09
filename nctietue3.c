@@ -884,8 +884,18 @@ static void _nct_free_fileinfo(nct_set* set) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 	if (fileinfo->owner & nct_ref_name)
-	    free((char*)fileinfo->name);
+	    free((char*)fileinfo->fileinfo.name);
 #pragma GCC diagnostic pop
+    }
+    else {
+	/* Always owner unless readmem flags is present. Quite unlogical. */
+	struct nct_fileinfo_t* fileinfo = set->fileinfo;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
+	free(fileinfo->name);
+#pragma GCC diagnostic pop
+	if (fileinfo->groups)
+	    free(fileinfo->groups);
     }
     set->fileinfo = (free(set->fileinfo), NULL);
 }
@@ -1223,23 +1233,23 @@ static void perhaps_open_the_file(nct_var* var) {
 	var->super->ncid = nct_open_mem(info);
     }
     else
-	ncfunk_open(var->super->fileinfo, NC_NOWRITE, &var->super->ncid);
+	ncfunk_open(nct_get_filename(var->super), NC_NOWRITE, &var->super->ncid);
 }
 
 /* No need to call outside nct_open_mem. */
 static void perhaps_load_the_content(struct nct_readmem_t* info) {
     if (info->content)
 	return;
-    info->content = info->getcontent(info->name, &info->size);
+    info->content = info->getcontent(info->fileinfo.name, &info->size);
     info->owner |= nct_ref_content;
 }
 
 static int nct_open_mem(struct nct_readmem_t* params) {
     int ncid;
     perhaps_load_the_content(params);
-    if ((nct_ncret = nc_open_mem(params->name, NC_NOWRITE, params->size, params->content, &ncid))) {
+    if ((nct_ncret = nc_open_mem(params->fileinfo.name, NC_NOWRITE, params->size, params->content, &ncid))) {
 	ncerror(nct_ncret);
-	fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", params->name);
+	fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", params->fileinfo.name);
 	nct_other_error;
     }
     return ncid;
@@ -1253,7 +1263,7 @@ FILE* nct_get_stream(const nct_var* var) {
 
 /* uses private nct_set.fileinfo */
 const char* nct_get_filename(const nct_set* set) {
-    return hasrule(set, nct_r_mem) ? ((struct nct_readmem_t*)set->fileinfo)->name : set->fileinfo;
+    return ((struct nct_fileinfo_t*)set->fileinfo)->name;
 }
 
 nct_var* nct_load_stream(nct_var* var, size_t len) {
@@ -1560,15 +1570,25 @@ static nct_set* _read_unknown_format(nct_set* dest, const char* name, int flags)
 /* Uses private nct_set.fileinfo. This is the core reading function. */
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags) {
     int ncid, ndims, nvars;
-    void* fileinfo;
+    struct nct_readmem_t *fileinfo;
     if (flags & nct_rmem) {
 	fileinfo = malloc(sizeof(struct nct_readmem_t));
 	memcpy(fileinfo, vfile, sizeof(struct nct_readmem_t));
+	if (!(fileinfo->owner & nct_ref_name)) {
+	    fileinfo->fileinfo.name = strdup(fileinfo->fileinfo.name);
+	    fileinfo->owner |= nct_ref_name;
+	}
 	ncid = nct_open_mem(fileinfo);
     }
     else if (flags & nct_rnetcdf) {
-	fileinfo = strdup(vfile);
-	ncfunk_open(fileinfo, NC_NOWRITE, &ncid);
+	fileinfo = calloc(1, sizeof(struct nct_fileinfo_t));
+	if (flags & nct_rregex) {
+	    memcpy(fileinfo, vfile, sizeof(struct nct_fileinfo_t));
+	    fileinfo->fileinfo.name = strdup(fileinfo->fileinfo.name);
+	}
+	else
+	    fileinfo->fileinfo.name = strdup(vfile);
+	ncfunk_open(fileinfo->fileinfo.name, NC_NOWRITE, &ncid);
     }
     else // If another filetype isn't recognized, calls this function again with flags|nct_rnetcdf.
 	return _read_unknown_format(dest, vfile, flags);
@@ -1654,7 +1674,7 @@ nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* conc
 
 nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
 	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    char* names = nct__get_filenames_(filename, 0, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
+    char* names = nct__get_filenames_deprecated(filename, 0, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
     if (nct_verbose) {
 	char* str = names;
@@ -1960,18 +1980,31 @@ void nct_write_nc(const nct_set* src, const char* name) {
     endpass;
 }
 
-char* nct__get_filenames(const char* restrict filename, int flags) {
-    return nct__get_filenames_(filename, flags, strcmp, NULL, 0, 0, NULL);
+char* nct__get_filenames(const char* restrict regex, int flags) {
+    return nct__get_filenames_((struct nct_get_filenames_args){.regex=regex, .regex_cflags=flags});
 }
 
-char* nct__get_filenames_cmpfun(const char* restrict filename, int flags, void *strcmpfun_for_sorting) {
-    return nct__get_filenames_(filename, flags, strcmpfun_for_sorting, NULL, 0, 0, NULL);
+char* nct__get_filenames_cmpfun(const char* restrict regex, int flags, void *strcmpfun_for_sorting) {
+    return nct__get_filenames_deprecated(regex, flags, strcmpfun_for_sorting, NULL, 0, 0, NULL);
 }
 
-char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void *strcmpfun_for_sorting,
+char* nct__get_filenames_deprecated(const char* restrict regex, int regex_cflags, void *strcmpfun_for_sorting,
 	void (*fun)(const char* restrict, int, regmatch_t* pmatch, void*), int size1dest, int nmatch, void** dest) {
+    return nct__get_filenames_((struct nct_get_filenames_args){
+	.regex = regex,
+	.regex_cflags = regex_cflags,
+	.strcmpfun_for_sorting = strcmpfun_for_sorting,
+	.fun = fun,
+	.size1dest = size1dest,
+	.nmatch = nmatch,
+	.dest = dest,
+	.groups_dest = NULL,
+	});
+}
+
+char *nct__get_filenames_(struct nct_get_filenames_args args) {
     static int num;
-    if (!filename)
+    if (!args.regex)
 	return (char*)(intptr_t)num;
     /* find the name of the directory */
     int i, ind = 0;
@@ -1981,16 +2014,16 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void 
     char* dirname = NULL;
     int smatch = 2048, lmatch=0; // space-of-match, length-of-match
     char* match = malloc(smatch);
-    if (fun)
-	*dest = malloc(smatch*size1dest);
-    for (i=0; filename[i]; i++)
-	if (filename[i] == '/')
+    if (args.fun)
+	*args.dest = malloc(smatch*args.size1dest);
+    for (i=0; args.regex[i]; i++)
+	if (args.regex[i] == '/')
 	    ind = i;
     /* open the directory */
-    int p2 = strlen(filename) - ind;
+    int p2 = strlen(args.regex) - ind;
     char str[(p2>ind? p2: ind) + 2];
     if (ind) {
-	strncpy(str, filename, ind);
+	strncpy(str, args.regex, ind);
 	str[ind] = '\0';
     }
     else strcpy(str, ".");
@@ -2006,8 +2039,8 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void 
 	nct_puterror("chdir(dirname) in nct__get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
-    strcpy(str, filename+ind+1);
-    i = regcomp(&reg, str, regex_cflags);
+    strcpy(str, args.regex+ind+1);
+    i = regcomp(&reg, str, args.regex_cflags);
     if (i) {
 	char er[700];
 	regerror(i, &reg, er, 700);
@@ -2015,21 +2048,29 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void 
 	nct_return_error(NULL);
     }
     num = 0;
-    nmatch *= !!fun;
-    regmatch_t pmatch[nmatch];
+    int room_groups = 0;
+    regmatch_t **groups = args.groups_dest ? malloc((room_groups=1024) * sizeof(void*)) : NULL;
+    regmatch_t regbuff[args.nmatch];
+    regmatch_t *group_ptr = regbuff;
     while ((entry = readdir(dp))) {
-	if (regexec(&reg, entry->d_name, nmatch, pmatch, 0))
+	if (groups) {
+	    if (num >= room_groups)
+		groups = realloc(groups, (room_groups += 1024) * sizeof(void*));
+	    groups[num] = malloc(args.nmatch * sizeof(regmatch_t));
+	    group_ptr = groups[num];
+	}
+	if (regexec(&reg, entry->d_name, args.nmatch, group_ptr, 0))
 	    continue;
 	int len = dlen + 1 + strlen(entry->d_name) + 1;
 	if (lmatch+len+1 > smatch) {
 	    smatch = lmatch + len + 1024;
 	    match = realloc(match, smatch);
-	    if (fun)
-		*dest = realloc(*dest, smatch*size1dest);
+	    if (args.fun)
+		*args.dest = realloc(*args.dest, smatch*args.size1dest);
 	}
 	sprintf(match+lmatch, "%s/%s", dirname, entry->d_name);
-	if (fun)
-	    fun(entry->d_name, num, pmatch, *dest);
+	if (args.fun)
+	    args.fun(entry->d_name, num, group_ptr, *args.dest);
 	lmatch += len;
 	num++;
     }
@@ -2039,18 +2080,23 @@ char* nct__get_filenames_(const char* restrict filename, int regex_cflags, void 
 	nct_puterror("chdir in nct__get_filenames: %s", strerror(errno));
 	nct_return_error(NULL);
     }
+
     char* sorted = malloc(lmatch+1);
-    void* sorted_dest = fun ? malloc(lmatch*size1dest) : NULL;
-    void* destarr[2] = {sorted_dest};
-    if (fun)
-	destarr[1] = *dest;
-    nct__sort_str(sorted, match, num, fun? destarr: NULL, size1dest, strcmpfun_for_sorting? strcmpfun_for_sorting: strcmp);
-    if (fun) {
-	free(*dest);
-	*dest = sorted_dest;
+    void* sorted_dest = args.fun ? malloc(lmatch*args.size1dest) : NULL;
+    void* destarrbuff[] = {sorted_dest, *args.dest};
+    void* destarr = args.fun ? destarrbuff : NULL;
+    regmatch_t **groups_dest = groups ? malloc(num * sizeof(void*)) : NULL;
+    void** ptrsbuff[] = {(void**)groups_dest, (void**)groups};
+    void*** ptrs = groups ? ptrsbuff : NULL;
+    nct__sort_str(sorted, match, num, destarr, args.size1dest, ptrs, args.strcmpfun_for_sorting? args.strcmpfun_for_sorting: strcmp);
+
+    if (args.fun) {
+	free(*args.dest);
+	*args.dest = sorted_dest;
     }
     free(match);
     free(dirname);
+    free(groups);
     regfree(&reg);
     return sorted;
 }
@@ -2091,7 +2137,7 @@ int nct__strcmp_numeric(const char *restrict a, const char *restrict b) {
 
 /* Selection sort that does not change src.
  * Other is an optional array which is sorted like src. other[0] is dest and other[1] is src. */
-char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], int size1other,
+char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], int size1other, void** ptrs[2],
     int (*strcmpfun)(const char*, const char*)) {
     const char *sptr, *strptr;
     char *dptr = dst;
@@ -2126,6 +2172,8 @@ char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], 
 	dptr += strlen(dptr)+1;
 	if (other)
 	    memcpy(other[0]+n_sorted*size1other, other[1]+indstr*size1other, size1other);
+	if (ptrs)
+	    ptrs[0][n_sorted] = ptrs[1][indstr];
 	n_sorted++;
     }
 out:

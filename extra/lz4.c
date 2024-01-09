@@ -93,7 +93,7 @@ void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed) {
 
 nct_set* nct_read_ncf_lz4_gd(nct_set* dest, const char* filename, int flags) {
     struct nct_readmem_t arg = {
-	.name = filename,
+	.fileinfo.name = filename,
 	.getcontent = nct__lz4_getcontent,
     };
     return nct_read_ncf_gd(dest, &arg, flags|nct_rmem);

@@ -106,6 +106,11 @@ union nct_any {
     time_t t;
 };
 
+struct nct_fileinfo_t {
+    const char *name;
+    regmatch_t *groups;
+};
+
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
     nct_r_start, nct_r_concat, nct_r_stream, nct_r_nrules,
@@ -429,7 +434,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
 /* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
    It could be for example nct__lz4_getcontent. */
 struct nct_readmem_t {
-    const char* name;	// Not strictly needed. Const is discarded in nct_free if (owner & nct_ref_name).
+    struct nct_fileinfo_t fileinfo;
     size_t size;	// size of the file in bytes
     void* content;	// content of the file
     unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
@@ -463,10 +468,10 @@ struct nct_readmem_t {
  *	Files are closed after the first read call and reopened on nct_load.
  *
  * nct_rmem:
- *	The 'const void* file' variable is a pointer to struct nct_readmem_t.
+ *	The filename argument to nct_read_* functions are a struct nct_readmem_t*.
  *	Cannot be used without nct_rkeep, which will be automatically added to readflags.
  * default:
- *	The 'const void* file' variable is the name of the file to be read.
+ *	The filename argument is the name of the file to be read.
  *
  * nct_rkeepmem:
  *	FIXME: Works properly only if added to global nct_readflags.
@@ -479,8 +484,18 @@ struct nct_readmem_t {
  * 	Filetype is netcdf.
  * default:
  * 	Other filetypes can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
+ *
+ * nct_rregex:
+ *	Filename argument to nct_read_* functions are struct nct_fileinfo_t* (see also nct_rmem flag).
+ *	Probably no need to ever set this flag manually.
+ *	Used automatically from nct_read_mfnc_regex, etc.
+ * default:
+ *	The filename argument is the name of the file to be read.
  */
-enum {nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3, nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6};
+enum {
+    nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
+    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rregex=1<<7,
+};
 extern int nct_readflags;
 
 /* Read data from netcdf. See also nct_read_ncf.
@@ -690,7 +705,7 @@ nct_var*  nct_meannan_first(nct_var*);
  */
 char* nct__get_filenames(const char* restrict regex, int regex_cflags);
 char* nct__get_filenames_cmpfun(const char* restrict filename, int flags, void *strcmpfun_for_sorting);
-char* nct__get_filenames_(
+char* nct__get_filenames_deprecated(
     const char* restrict regex,
     int regex_cflags,
     void *strcmpfun_for_sorting,
@@ -698,14 +713,28 @@ char* nct__get_filenames_(
     int size1,
     int nmatch,
     void** dest
-);
+) __attribute__((deprecated));
+
+struct nct_get_filenames_args {
+    const char* restrict regex;
+    int regex_cflags;
+    void *strcmpfun_for_sorting;
+    void (*fun)(const char* restrict, int, regmatch_t *pmatch, void*);
+    int size1dest, nmatch;
+    void **dest;
+    regmatch_t ***groups_dest;
+};
+
+char* nct__get_filenames_(struct nct_get_filenames_args);
+
 #define nct__getn_filenames() ((intptr_t)nct__get_filenames(NULL, 0))
 #define nct__forstr(names, str) for(char* str=((char*)names); *str; str+=strlen(str)+1) // iterating over the result of nct__get_filenames
 
 /* src has the form of result of nct__get_filenames.
    n is optional: if -1 if given, n is calculated.
-   other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given. */
-char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other,
+   other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given.
+   The same applies to more_data. */
+char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other, void **more_data[2],
     int (*strcmpfun)(const char*, const char*));
 
 /* To be passed as strcmpfun to nct__sort_str, nct_read_mfnc_regex, etc.,
