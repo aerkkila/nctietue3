@@ -921,7 +921,7 @@ void _nct_free(int _, ...) {
 
 /* uses private nct_set.fileinfo */
 static void _nct_unlink_fileinfo(struct nct_fileinfo_t *fileinfo) {
-    if (--fileinfo->nusers)
+    if (!fileinfo || --fileinfo->nusers)
 	return;
     if (fileinfo->ismem_t) {
 	struct nct_fileinfo_mem_t* info = (void*)fileinfo;
