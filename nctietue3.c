@@ -1367,8 +1367,25 @@ const char* nct_get_filename(const nct_set* set) {
 }
 
 /* uses private nct_set.fileinfo */
+const char* nct_get_filename_var(const nct_var* var) {
+    if (!var->fileinfo)
+	return nct_get_filename(var->super);
+    return var->fileinfo->name;
+}
+
+/* uses private nct_set.fileinfo */
 const char* nct_get_filename_capture(const nct_set* set, int igroup, int *capture_len) {
     struct nct_fileinfo_t *info = set->fileinfo;
+    regmatch_t *match = info->groups + igroup;
+    *capture_len = match->rm_eo - match->rm_so;
+    return info->name + info->dirnamelen + match->rm_so;
+}
+
+/* uses private nct_set.fileinfo */
+const char* nct_get_filename_var_capture(const nct_var* var, int igroup, int *capture_len) {
+    if (!var->fileinfo)
+	return nct_get_filename_capture(var->super, igroup, capture_len);
+    struct nct_fileinfo_t *info = var->fileinfo;
     regmatch_t *match = info->groups + igroup;
     *capture_len = match->rm_eo - match->rm_so;
     return info->name + info->dirnamelen + match->rm_so;

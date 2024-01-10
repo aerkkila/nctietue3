@@ -312,7 +312,9 @@ size_t		nct_get_len_from(const nct_var*, int startdim);
 long		nct_get_interval_ms(int timeunit_enumeration); // argument can be nct_mktime(args).d
 FILE*		nct_get_stream(const nct_var*);
 const char*	nct_get_filename(const nct_set*);
+const char*	nct_get_filename_var(const nct_var* var);
 const char*	nct_get_filename_capture(const nct_set* set, int igroup, int *capture_len); // regex capture groups
+const char*	nct_get_filename_var_capture(const nct_var* var, int igroup, int *capture_len); // regex capture groups
 double		nct_getg_floating(const nct_var* var, size_t ind); // general: calls either getl or get
 double		nct_getg_integer(const nct_var* var, size_t ind);  // general: calls either getl or get
 double		nct_getl_floating(const nct_var*, size_t); // If the value has to be loaded.
