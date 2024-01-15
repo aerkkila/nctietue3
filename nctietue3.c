@@ -2065,6 +2065,7 @@ void nct_unlink_data(nct_var* var) {
     }
     var->data = var->nusers = NULL;
     var->capacity = 0;
+    var->startpos = var->endpos = 0;
 }
 
 void nct_unlink_stream(nct_var* var) {
