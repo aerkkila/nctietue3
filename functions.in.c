@@ -250,6 +250,17 @@ void* nct_minmax_at_@nctype(const nct_var* var, long start, long end, void* vres
 	    maxval = ((ctype*)var->data)[i];
 	else if (minval > ((ctype*)var->data)[i])
 	    minval = ((ctype*)var->data)[i];
+    /* If data were in ascending order, minimum value was never assigned for a floating point number
+       due to the optimization above where else-if was used instead if. */
+#if __nctype__==NC_FLOAT || __nctype__==NC_DOUBLE
+    if (minval == INFINITY)
+	for (int i=start+1; i<end; i++)
+	    if (!my_isnan_@ctype(((ctype*)var->data)[i]) &&
+		minval > ((ctype*)var->data)[i]) {
+		minval = ((ctype*)var->data)[i];
+		break;
+	    }
+#endif
     result[0] = minval;
     result[1] = maxval;
     return result;
