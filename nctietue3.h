@@ -106,7 +106,7 @@ union nct_any {
     time_t t;
 };
 
-struct nct_fileinfo_t{
+struct nct_fileinfo_t {
     const char *name;
     int dirnamelen;
     regmatch_t *groups;
@@ -237,7 +237,8 @@ nct_att* nct_copy_att(nct_var*, const nct_att*);
 /* Make a new coordinate variable with the same bounds as in coord but different interval and length. */
 nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name);
 /* nct_load(nct_copy_var(...)) does not work. */
-nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link); // data are copied, if link is false
+nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link);		// data are copied, if link is false
+nct_set* nct_copy(nct_set* dest, const nct_set* src, int link); 	// if link < 0 no copied nor linked
 
 #define nct_create_simple(...) _nct_create_simple(__VA_ARGS__, 0)
 #define nct_create_simple_gd(...) _nct_create_simple_gd(__VA_ARGS__, 0)
@@ -457,6 +458,15 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  * nct_rcoord:
  *	Like nct_rlazy but coordinate variables are loaded.
  *	nct_rlazy | nct_rcoord is undefined behaviour.
+ *	When reading a multifile, the second to last files are however read with nct_rlazy.
+ * nct_rcoordall:
+ *	Meaningful only when combined with nct_rcoord.
+ *	Read all coordinates also from multifiles.
+ * nct_requalfiles:
+ *	Meaningful only when combined with nct_rcoord or nct_rlazy.
+ *	When reading a multifile, the second to last files are not touched at all.
+ *	They are assumed to have the same metacontent as the first file.
+ *	Sometimes this can save a lot of time.
  * default:
  *      Everything is read at once.
  *
@@ -496,7 +506,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  */
 enum {
     nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
-    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6,
+    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=1<<7, nct_requalfiles,
 };
 extern int nct_readflags;
 

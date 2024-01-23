@@ -662,20 +662,20 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     for(int a=0; a<src->natts; a++)
 	nct_copy_att(var, src->atts+a);
 
-    /* Let's explicitely copy those rules which we know how to deal with.
-       The rules are after all a wild area which shouldn't exist in the first place. */
+    /* Let's explicitely copy those rules which we know how to deal with. */
     int known_rules = nct_r_start | nct_r_stream | nct_r_concat;
     if (anyrule(src, ~known_rules)) {
-	nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n"
-		"Set 'nct_error_action = nct_pass' to still continue.\n", src->name, nct_get_filename(src->super));
-	nct_other_error;
+	nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n",
+	    src->name, nct_get_filename(src->super));
     }
     nct_link_stream(var, src); // handles nct_r_stream
     /* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
     /* nct_r_start is handled in nct_link_data. */
 
-    if (link)
+    if (link > 0)
 	nct_link_data(var, src);
+    else if (link < 0)
+	var->data = NULL;
     else {
 	int len = var->len;
 	var->data = malloc(len*nctypelen(var->dtype));
@@ -685,6 +685,18 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     var->endpos = src->endpos;
 
     return var;
+}
+
+nct_set* nct_copy(nct_set *toset, const nct_set *fromset, int link) {
+    *toset = (nct_set){0};
+    for (int i=0; i<fromset->ndims; i++) {
+	nct_var *dim = fromset->dims[i];
+	char *name = dim->freeable_name ? strdup(dim->name) : dim->name;
+	nct_add_dim(toset, dim->len, name)->freeable_name = dim->freeable_name;
+    }
+    for (int i=0; i<fromset->nvars; i++)
+	nct_copy_var(toset, fromset->vars[i], link);
+    return toset;
 }
 
 /* The compiler doesn't understand that we have checked that ndims < 100
@@ -1411,7 +1423,8 @@ const char* nct_get_filename_var_capture(const nct_var* var, int igroup, int *ca
 	return nct_get_filename_capture(var->super, igroup, capture_len);
     struct nct_fileinfo_t *info = var->fileinfo;
     regmatch_t *match = info->groups + igroup;
-    *capture_len = match->rm_eo - match->rm_so;
+    if (capture_len)
+	*capture_len = match->rm_eo - match->rm_so;
     return info->name + info->dirnamelen + match->rm_so;
 }
 
@@ -1730,6 +1743,12 @@ static nct_set* _read_unknown_format(nct_set* dest, const char* name, int flags)
 }
 #undef matches
 
+static struct nct_fileinfo_t* nct_init_fileinfo() {
+    struct nct_fileinfo_t *fileinfo = calloc(1, sizeof(struct nct_fileinfo_t));
+    fileinfo->nusers = 1;
+    return fileinfo;
+}
+
 /* Uses private nct_set.fileinfo. This is the core reading function. */
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags) {
     int ncid, ndims, nvars;
@@ -1816,6 +1835,7 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int nfiles, char* concat_args)
 }
 
 /* filenames has the form of "name1\0name2\0name3\0last_name\0\0" */
+/* This is the core multifile function. */
 nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, char* concat_args,
 	regmatch_t **groups, int dirnamelen) {
     const char* ptr = filenames;
@@ -1833,6 +1853,7 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
     }
     else if (!nfiles)
 	return NULL; // no error if user wanted to read 0 files
+    int nfiles0 = nfiles;
     ptr = filenames;
 
     nct_set *set, *setptr;
@@ -1850,14 +1871,34 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
     nfiles--;
     setrule(set, nct_r_list); // so that nct_free knows to free other members as well
     ptr += strlen(ptr)+1;
+    if (!(readflags & nct_rcoordall)) {
+	readflags &= ~(nct_rcoord|nct_rcoordall);
+	readflags |= nct_rlazy;
+    }
+
+    nct_set original_set = {0};
+    if (readflags & nct_requalfiles)
+	nct_copy(&original_set, set, -1);
+
+    /* The first set was already read above. */
     while (*ptr) {
-	nct_read_ncf_gd(++setptr, ptr, readflags);
+	if (readflags & nct_requalfiles) {
+	    nct_copy(++setptr, &original_set, -1);
+	    setptr->fileinfo = nct_init_fileinfo();
+	}
+	else
+	    nct_read_ncf_gd(++setptr, ptr, readflags);
 	if (groups)
 	    ((struct nct_fileinfo_t*)setptr->fileinfo)->groups = groups[++ind];
 	((struct nct_fileinfo_t*)setptr->fileinfo)->dirnamelen = dirnamelen;
 	nct_concat(set, setptr, concat_args, --nfiles);
 	ptr += strlen(ptr)+1;
+	if (nct_verbose) {
+	    printf("concatenating %i / %i", nfiles0 - nfiles, nfiles0);
+	    verbose_line_ending();
+	}
     }
+    nct_free1(&original_set);
     return set;
 
 read_and_load:
@@ -1878,6 +1919,10 @@ read_and_load:
 	nct_concat(set, &set1, concat_args, --nfiles);
 	nct_free1(&set1); // TODO: read files straight to vs0 to avoid unnecessarily allocating and freeing memory
 	ptr += strlen(ptr)+1;
+	if (nct_verbose) {
+	    printf("loading and concatenating %i / %i", nfiles0 - nfiles, nfiles0);
+	    verbose_line_ending();
+	}
     }
     return set;
 }
