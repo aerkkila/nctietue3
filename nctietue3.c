@@ -283,14 +283,14 @@ nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned fre
 }
 
 nct_var* nct_add_vardim_first(nct_var* var, int dimid) {
-    if(var->dimcapacity < var->ndims+1) {
+    if (var->dimcapacity < var->ndims+1) {
 	var->dimcapacity = var->ndims+2;
 	var->dimids = realloc(var->dimids, var->dimcapacity*sizeof(int));
     }
     memmove(var->dimids+1, var->dimids, var->ndims*sizeof(int));
     var->dimids[0] = dimid;
     var->ndims++;
-    var->len *= nct_get_dim_id(var->super, dimid)->len;
+    var->len *= var->super->dims[dimid]->len;
     return var;
 }
 
@@ -420,8 +420,11 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	nct_var* var1 = nct_get_var(vs1, var0->name);
 	if (!var1)
 	    continue;
-	if (dimname_is_new)
+	if (dimname_is_new) {
+	    size_t len = var0->len;
 	    nct_add_vardim_first(var0, dimid0);
+	    var0->len = len; // concatenation will also increase length so let's not do it twice
+	}
 	else if (nct_get_vardimid(var0, dimid0) < 0)
 	    _nct_concat_handle_new_dim(var0, vs1);
 	if (var0->endpos < var0->len)
@@ -1615,7 +1618,7 @@ void nct_print_dim(nct_var* var, const char* indent) {
     nct_print_atts(var, indent, "  ");
 }
 
-void nct_print(nct_set* set) {
+static void _nct_print(nct_set* set, int nodata) {
     const char* filename = nct_get_filename(set);
     if (filename)
 	printf("%s:\n", filename);
@@ -1625,10 +1628,24 @@ void nct_print(nct_set* set) {
 	putchar('\n');
 	nct_print_dim(set->dims[i], "  ");
     }
-    nct_foreach(set, var) {
-	putchar('\n');
-	nct_print_var(var, "  ");
-    }
+    if (nodata)
+	nct_foreach(set, var) {
+	    putchar('\n');
+	    nct_print_var_meta(var, "  ");
+	}
+    else
+	nct_foreach(set, var) {
+	    putchar('\n');
+	    nct_print_var(var, "  ");
+	}
+}
+
+void nct_print(nct_set* set) {
+    _nct_print(set, 0);
+}
+
+void nct_print_meta(nct_set* set) {
+    _nct_print(set, 1);
 }
 
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {

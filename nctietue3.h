@@ -194,8 +194,6 @@ struct nct_anyd {
 #define nct_dimid(var) ((var)->id_dim-1)
 #define nct_varid_(loc) (loc+1)
 #define nct_dimid_(loc) (loc+1)
-#define nct_get_var_id(set, id) ((set)->vars[(id)-1])
-#define nct_get_dim_id(set, id) ((set)->dims[(id)-1])
 #define nct_iscoord(var) ((var)->id_dim && (var)->id_var)
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
@@ -437,6 +435,7 @@ void nct_print_var(nct_var*, const char* indent);
 void nct_print_var_meta(const nct_var* var, const char* indent);
 void nct_print_dim(nct_var*, const char* indent);
 void nct_print(nct_set*);
+void nct_print_meta(nct_set* set);
 
 nct_var* nct_put_interval(nct_var* var, double i0, double gap);
 
