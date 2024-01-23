@@ -405,6 +405,12 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	}
     }
 
+    int dimname_is_new = 1;
+    nct_foreach(vs0, var)
+	if (nct_get_vardimid(var, dimid0) >= 0) {
+	    dimname_is_new = 0;
+	    break; }
+
     /* Concatenate all variables.
        Called concat-functions change var->len but not vardim->len which has already been changed above
        so that changes would not cumulate when having multiple variables. */
@@ -414,7 +420,9 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	nct_var* var1 = nct_get_var(vs1, var0->name);
 	if (!var1)
 	    continue;
-	if (nct_get_vardimid(var0, dimid0) < 0)
+	if (dimname_is_new)
+	    nct_add_vardim_first(var0, dimid0);
+	else if (nct_get_vardimid(var0, dimid0) < 0)
 	    _nct_concat_handle_new_dim(var0, vs1);
 	if (var0->endpos < var0->len)
 	    /* To be concatenated when loaded. */
@@ -425,8 +433,7 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 		nct_load(var1); // Now data is written here and copied to var0. Not good.
 	    _nct_concat_var(var0, var1, dimid0, howmany_left);
 	}
-    }
-    while (++iloop != nvars && (
+    } while (++iloop != nvars && (
 	    (varids0 && (var0 = vs0->vars[varids0[iloop]])) ||
 	    (var0 = nct_nextvar(var0))));
 
@@ -435,6 +442,7 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
     return vs0;
 }
 
+/* Called from concatenate -v:args */
 char* _makename_concat_v(nct_var *var, const char* args) {
     int capac = 256, newlen=0;
     char *new = malloc(capac);
@@ -483,7 +491,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 	dimname = "-0";
     if (dimname[0] == '-') {
 	int dimid0;
-	/* A number tells which vardim to concatenate along. Defined based on the dimensions of the first var. */
+	/* A number tells which vardim to concatenate along. (TODO:not) Defined based on the dimensions of the first var. */
 	if (sscanf(dimname+1, "%i", &dimid0) == 1) {
 	    nct_foreach(vs0, v)
 		if (dimid0 < v->ndims) {
@@ -495,6 +503,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 	else if (!strncmp(dimname, "-v", 2)) {
 	    nct_foreach(vs1, var1) {
 		// nct_load(var1); // not needed since var->fileinfo was added
+		/* -v:args tells how to rename the variables */
 		if (dimname[2] == ':') {
 		    char *name = _makename_concat_v(var1, dimname+3);
 		    nct_rename(var1, name, 1);
