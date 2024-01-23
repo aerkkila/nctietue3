@@ -1400,7 +1400,8 @@ const char* nct_get_filename_var(const nct_var* var) {
 const char* nct_get_filename_capture(const nct_set* set, int igroup, int *capture_len) {
     struct nct_fileinfo_t *info = set->fileinfo;
     regmatch_t *match = info->groups + igroup;
-    *capture_len = match->rm_eo - match->rm_so;
+    if (capture_len)
+	*capture_len = match->rm_eo - match->rm_so;
     return info->name + info->dirnamelen + match->rm_so;
 }
 
