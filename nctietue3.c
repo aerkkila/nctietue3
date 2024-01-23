@@ -181,6 +181,8 @@ void* nct_getfun_1[] = {
 #include "extra/lz4.c"
 #endif
 
+static struct nct_fileinfo_t* _nct_link_fileinfo(struct nct_fileinfo_t*);
+
 static void verbose_line_ending() {
     if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K\r"), fflush(stdout);
@@ -512,8 +514,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		    nct_rename(var1, name, 1);
 		}
 		nct_var* var = nct_copy_var(vs0, var1, 1);
-		var->fileinfo = var1->super->fileinfo;
-		((struct nct_fileinfo_t*)var->fileinfo)->nusers++;
+		var->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
 		// var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
 		nct_ensure_unique_name(var);
 	    }
@@ -649,13 +650,10 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	    }
 	}
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
-	var->fileinfo = src->fileinfo ? src->fileinfo : src->super->fileinfo;
-	if (var->fileinfo) {
-	    var->fileinfo->nusers++;
-	    var->ncid = src->ncid;
-	    var->nfiledims = src->nfiledims;
-	    memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
-	}
+	var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
+	var->ncid = src->ncid;
+	var->nfiledims = src->nfiledims;
+	memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
 	var->freeable_name = 1;
     }
 
@@ -941,6 +939,12 @@ void _nct_free(int _, ...) {
     while((int)(addr = va_arg(args, intptr_t)) != -1)
 	nct_free1((nct_set*)addr);
     va_end(args);
+}
+
+static struct nct_fileinfo_t* _nct_link_fileinfo(struct nct_fileinfo_t *fileinfo) {
+    if (fileinfo)
+	fileinfo->nusers++;
+    return fileinfo;
 }
 
 /* uses private nct_set.fileinfo */
@@ -1398,7 +1402,9 @@ FILE* nct_get_stream(const nct_var* var) {
 
 /* uses private nct_set.fileinfo */
 const char* nct_get_filename(const nct_set* set) {
-    return ((struct nct_fileinfo_t*)set->fileinfo)->name;
+    if (set->fileinfo)
+	return ((struct nct_fileinfo_t*)set->fileinfo)->name;
+    return NULL;
 }
 
 /* uses private nct_set.fileinfo */
@@ -1743,9 +1749,10 @@ static nct_set* _read_unknown_format(nct_set* dest, const char* name, int flags)
 }
 #undef matches
 
-static struct nct_fileinfo_t* nct_init_fileinfo() {
+static struct nct_fileinfo_t* nct_init_fileinfo(const char *filename) {
     struct nct_fileinfo_t *fileinfo = calloc(1, sizeof(struct nct_fileinfo_t));
     fileinfo->nusers = 1;
+    fileinfo->name = strdup(filename);
     return fileinfo;
 }
 
@@ -1877,14 +1884,19 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
     }
 
     nct_set original_set = {0};
-    if (readflags & nct_requalfiles)
+    if (readflags & nct_requalfiles) {
 	nct_copy(&original_set, set, -1);
+	for (int i=0; i<original_set.nvars; i++) {
+	    _nct_unlink_fileinfo(original_set.vars[i]->fileinfo);
+	    original_set.vars[i]->fileinfo = NULL;
+	}
+    }
 
     /* The first set was already read above. */
     while (*ptr) {
 	if (readflags & nct_requalfiles) {
 	    nct_copy(++setptr, &original_set, -1);
-	    setptr->fileinfo = nct_init_fileinfo();
+	    setptr->fileinfo = nct_init_fileinfo(ptr);
 	}
 	else
 	    nct_read_ncf_gd(++setptr, ptr, readflags);
@@ -2098,6 +2110,8 @@ nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
     }
     ((nct_var**)r->arg.v)[r->n++] = var1;
     var0->len += var1->len;
+    if (!var1->fileinfo)
+	var1->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
     return var0;
 }
 
