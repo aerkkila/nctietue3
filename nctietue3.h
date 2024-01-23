@@ -328,6 +328,9 @@ long long	nct_getl_integer(const nct_var*, size_t);  // If the value has to be l
    otherwise a new variable is generated into tocoord->super. */
 nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_if_possible);
 
+/* Tovar will be filled with values interpolated from fromvar. */
+nct_var* nct_interpolate_to(nct_var* fromvar, nct_var* tovar, int unused);
+
 /* Reads attribute "units" from $var
    and fills timetm according to that
    and unit with enumeration of time unit (days, seconds, etc.).
@@ -525,25 +528,26 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type typ
 nct_set* nct_read_ncf(const void* file, int readflags);
 nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
+struct nct_mf_regex_args {
+    const char* restrict regex;
+    int regex_cflags, nct_readflags;
+    void *strcmpfun_for_sorting;
+    char* restrict concat_args;
+
+    /* This nonsense is now unnecessary. Use groups_out instead. */
+    //void (*fun)(const char* restrict, int, regmatch_t *pmatch, void*);
+    //int size1dest;
+    //void **dest;
+
+    int nmatch, return_groups;
+    regmatch_t **groups_out;
+    int dirnamelen_out;
+};
+
 /* Same as below but without readflags. */
-nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
-nct_set* nct_read_mfnc_regex_strcmp(const char* filename_regex, int regex_cflags, char* concatdim, void *strcmpfun);
-/* See comment on nct__get_filenames. */
-nct_set* nct_read_mfnc_regex_(
-	const char*	filename,
-	int		regex_cflags,
-	char*		concatdim,
-	void*		strcmpfun,
-	void (*matchfun)(
-	    const char* restrict,	// filename
-	    int,			// nmatch
-	    regmatch_t*,		// match
-	    void*			// data out
-	    ),
-	int	size1,
-	int	nmatches,
-	void**	matchdest
-	);
+nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim) __attribute__((deprecated));
+nct_set* nct_read_mfnc_regex_strcmp(const char* filename_regex, int regex_cflags, char* concatdim, void *strcmpfun) __attribute__((deprecated));
+nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args*);
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
@@ -551,24 +555,7 @@ nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 nct_set* nct_read_mfnc_ptrptr(char** filenames, int n, char* concatdim);
 
 nct_set* nct_read_mfncf_regex(const char* filename_regex, int readflags, int regex_cflags, char* concatdim);
-nct_set* nct_read_mfncf_regex_strcmp(const char* filename_regex, int readflags, int regex_cflags, char* concatdim, void *strcmpfun);
-/* See comment on nct__get_filenames. */
-nct_set* nct_read_mfncf_regex_(
-	const char*	filename,
-	int		readflags,
-	int		regex_cflags,
-	char*		concatdim,
-	void*		strcmpfun,
-	void (*matchfun)(
-	    const char* restrict,	// filename
-	    int,			// nmatch
-	    regmatch_t*,		// match
-	    void*			// data out
-	    ),
-	int	size1,
-	int	nmatches,
-	void**	matchdest
-	);
+nct_set* nct_read_mfncf_regex_strcmp(const char* filename_regex, int readflags, int regex_cflags, char* concatdim, void *strcmpfun) __attribute__((deprecated));
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
@@ -715,20 +702,9 @@ char* nct__get_filenames_deprecated(
     void** dest
 ) __attribute__((deprecated));
 
-struct nct_get_filenames_args {
-    const char* restrict regex;
-    int regex_cflags;
-    void *strcmpfun_for_sorting;
-    void (*fun)(const char* restrict, int, regmatch_t *pmatch, void*);
-    int size1dest, nmatch;
-    void **dest;
-    regmatch_t ***groups_dest;
-    int *dirnamelen;
-};
+char* nct__get_filenames_args(struct nct_mf_regex_args*);
 
-char* nct__get_filenames_(struct nct_get_filenames_args);
-
-#define nct__getn_filenames() ((intptr_t)nct__get_filenames(NULL, 0))
+#define nct__getn_filenames() ((intptr_t)nct__get_filenames_args(NULL))
 #define nct__forstr(names, str) for(char* str=((char*)names); *str; str+=strlen(str)+1) // iterating over the result of nct__get_filenames
 
 /* src has the form of result of nct__get_filenames.

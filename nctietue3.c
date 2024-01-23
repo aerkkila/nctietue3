@@ -1187,6 +1187,17 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_
     return var;
 }
 
+/*
+nct_var* nct_interpolate_to(nct_var* fromvar, nct_var* tovar, int unused) {
+    nct_perhaps_load_partially(fromvar, 0, fromvar->len);
+    nct_allocate_varmem(tovar);
+    for (int idim=tovar->ndims-1; idim>=0; idim--) {
+	void *newdata = nct_get_interpolated(fromvar, idim, nct_get_vardimid(tovar, idim));
+    }
+#error Kesken
+    return tovar;
+}*/
+
 nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name) {
     double v0 = nct_get_floating(coord, 0);
     double v1 = nct_get_floating_last(coord, 1);
@@ -1874,47 +1885,54 @@ nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char
 }
 
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concat_args) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
+    struct nct_mf_regex_args args = {
+	.regex = filename,
+	.regex_cflags = regex_cflags,
+	.concat_args = concat_args,
+	.nct_readflags = nct_readflags,
+    };
+    return nct_read_mfnc_regex_args(&args);
 }
 
 nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
+    struct nct_mf_regex_args args = {
+	.regex = filename,
+	.regex_cflags = regex_cflags,
+	.concat_args = concat_args,
+	.nct_readflags = nct_readflags,
+	.strcmpfun_for_sorting = strcmpfun,
+    };
+    return nct_read_mfnc_regex_args(&args);
 }
 
 nct_set* nct_read_mfncf_regex(const char* filename, int readflags, int regex_cflags, char* concat_args) {
-    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, NULL, NULL, 0, 0, NULL);
+    struct nct_mf_regex_args args = {
+	.regex = filename,
+	.regex_cflags = regex_cflags,
+	.concat_args = concat_args,
+	.nct_readflags = readflags,
+    };
+    return nct_read_mfnc_regex_args(&args);
 }
 
 nct_set* nct_read_mfncf_regex_strcmp(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun) {
-    return nct_read_mfncf_regex_(filename, readflags, regex_cflags, concat_args, strcmpfun, NULL, 0, 0, NULL);
-}
-
-nct_set* nct_read_mfnc_regex_(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
-	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    return nct_read_mfncf_regex_(filename, nct_readflags, regex_cflags, concat_args, strcmpfun_for_sorting, matchfun, size1, nmatch, matchdest);
-}
-
-nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun_for_sorting,
-	void (*matchfun)(const char* restrict, int, regmatch_t*, void*), int size1, int nmatch, void** matchdest) {
-    regmatch_t **groups = NULL;
-    int dirnamelen = 0;
-
-    char *names = nct__get_filenames_((struct nct_get_filenames_args){
+    struct nct_mf_regex_args args = {
 	.regex = filename,
 	.regex_cflags = regex_cflags,
-	.strcmpfun_for_sorting = strcmpfun_for_sorting,
-	.fun = matchfun,
-	.size1dest = size1,
-	.nmatch = nmatch,
-	.dest = matchdest,
-	.groups_dest = &groups,
-	.dirnamelen = &dirnamelen,
-	});
+	.concat_args = concat_args,
+	.nct_readflags = readflags,
+	.strcmpfun_for_sorting = strcmpfun,
+    };
+    return nct_read_mfnc_regex_args(&args);
+}
 
+/* The core read regex function. */
+nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
+    char *names = nct__get_filenames_args(args);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
     if (nct_verbose) {
 	char* str = names;
-	printf("match from %s:", filename);
+	printf("match from %s:", args->regex);
 	verbose_line_ending();
 	while (*str) {
 	    printf("%s", str);
@@ -1924,13 +1942,16 @@ nct_set* nct_read_mfncf_regex_(const char* filename, int readflags, int regex_cf
     }
     if (num == 0) {
 	free(names);
-	nct_puterror("No files match \"%s\"\n", filename);
+	nct_puterror("No files match \"%s\"\n", args->regex);
 	nct_return_error(NULL);
     }
 
-    nct_set* s = nct_read_mfncf_ptr1(names, readflags, num, concat_args, groups, dirnamelen);
+    nct_set* s = nct_read_mfncf_ptr1(names, args->nct_readflags, num, args->concat_args, args->groups_out, args->dirnamelen_out);
 
-    free(groups);
+    if (!args->return_groups) {
+	free(args->groups_out); // Frees ptrptr. All pointers are in struct fileinfos.
+	args->groups_out = NULL;
+    }
 
     free(names);
     return s;
@@ -2141,31 +2162,35 @@ void nct_write_nc(const nct_set* src, const char* name) {
 }
 
 char* nct__get_filenames(const char* restrict regex, int flags) {
-    return nct__get_filenames_((struct nct_get_filenames_args){.regex=regex, .regex_cflags=flags});
+    struct nct_mf_regex_args args = {.regex=regex, .regex_cflags=flags};
+    return nct__get_filenames_args(&args);
 }
 
 char* nct__get_filenames_cmpfun(const char* restrict regex, int flags, void *strcmpfun_for_sorting) {
-    return nct__get_filenames_((struct nct_get_filenames_args){regex, flags, strcmpfun_for_sorting});
+    struct nct_mf_regex_args args = {.regex = regex, .regex_cflags = flags, .strcmpfun_for_sorting = strcmpfun_for_sorting};
+    return nct__get_filenames_args(&args);
 }
 
 char* nct__get_filenames_deprecated(const char* restrict regex, int regex_cflags, void *strcmpfun_for_sorting,
 	void (*fun)(const char* restrict, int, regmatch_t* pmatch, void*), int size1dest, int nmatch, void** dest) {
-    return nct__get_filenames_((struct nct_get_filenames_args){
+    struct nct_mf_regex_args args = {
 	.regex = regex,
 	.regex_cflags = regex_cflags,
 	.strcmpfun_for_sorting = strcmpfun_for_sorting,
-	.fun = fun,
+	/*.fun = fun,
 	.size1dest = size1dest,
-	.nmatch = nmatch,
 	.dest = dest,
-	.groups_dest = NULL,
-	});
+	.nmatch = nmatch,*/
+	.groups_out = NULL,
+    };
+    return nct__get_filenames_args(&args);
 }
 
-char *nct__get_filenames_(struct nct_get_filenames_args args) {
+char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
     static int num;
-    if (!args.regex)
+    if (!argsp)
 	return (char*)(intptr_t)num;
+    struct nct_mf_regex_args args = *argsp; // for convenience
     /* find the name of the directory */
     int i, ind = 0;
     DIR* dp;
@@ -2174,8 +2199,8 @@ char *nct__get_filenames_(struct nct_get_filenames_args args) {
     char* dirname = NULL;
     int smatch = 2048, lmatch=0; // space-of-match, length-of-match
     char* match = malloc(smatch);
-    if (args.fun)
-	*args.dest = malloc(smatch*args.size1dest);
+    /*if (args.fun)
+	*args.dest = malloc(smatch*args.size1dest);*/
     for (i=0; args.regex[i]; i++)
 	if (args.regex[i] == '/')
 	    ind = i;
@@ -2210,18 +2235,15 @@ char *nct__get_filenames_(struct nct_get_filenames_args args) {
 
     num = 0;
     int room_groups = 0;
-    int savegroups = !!args.groups_dest;
-    regmatch_t **saved_groups = savegroups ? malloc((room_groups=1024) * sizeof(void*)) : NULL;
-    if (savegroups && !args.nmatch)
-	args.nmatch = 10;
-    regmatch_t regbuff[args.nmatch];
-    regmatch_t *group_ptr = regbuff;
+    regmatch_t **saved_groups = args.nmatch ? malloc((room_groups=1024) * sizeof(void*)) : NULL;
+    /*regmatch_t regbuff[args.nmatch];
+    regmatch_t *group_ptr = regbuff;*/
     regmatch_t* groups_next_ptr = malloc(args.nmatch * sizeof(regmatch_t));
 
     while ((entry = readdir(dp))) {
 	if (regexec(&reg, entry->d_name, args.nmatch, groups_next_ptr, 0))
 	    continue;
-	if (savegroups) {
+	if (args.nmatch) {
 	    if (num >= room_groups)
 		saved_groups = realloc(saved_groups, (room_groups += 1024) * sizeof(void*));
 	    saved_groups[num] = groups_next_ptr;
@@ -2231,12 +2253,12 @@ char *nct__get_filenames_(struct nct_get_filenames_args args) {
 	if (lmatch+len+1 > smatch) {
 	    smatch = lmatch + len + 1024;
 	    match = realloc(match, smatch);
-	    if (args.fun)
-		*args.dest = realloc(*args.dest, smatch*args.size1dest);
+	    /*if (args.fun)
+		*args.dest = realloc(*args.dest, smatch*args.size1dest);*/
 	}
 	sprintf(match+lmatch, "%s/%s", dirname, entry->d_name);
-	if (args.fun)
-	    args.fun(entry->d_name, num, group_ptr, *args.dest);
+	/*if (args.fun)
+	    args.fun(entry->d_name, num, group_ptr, *args.dest);*/
 	lmatch += len;
 	num++;
     }
@@ -2250,27 +2272,26 @@ char *nct__get_filenames_(struct nct_get_filenames_args args) {
     }
 
     char* sorted = malloc(lmatch+1);
-    void* sorted_dest = args.fun ? malloc(lmatch*args.size1dest) : NULL;
+    /*void* sorted_dest = args.fun ? malloc(lmatch*args.size1dest) : NULL;
     void* destarrbuff[] = {sorted_dest, args.dest ? *args.dest : NULL};
-    void* destarr = args.fun ? destarrbuff : NULL;
+    void* destarr = args.fun ? destarrbuff : NULL;*/
 
-    regmatch_t **saved_groups_sorted = savegroups ? malloc(num * sizeof(void*)) : NULL;
+    regmatch_t **saved_groups_sorted = args.nmatch ? malloc(num * sizeof(void*)) : NULL;
     void** ptrsbuff[] = {(void**)saved_groups_sorted, (void**)saved_groups};
     void*** ptrs = saved_groups ? ptrsbuff : NULL;
-    nct__sort_str(sorted, match, num, destarr, args.size1dest, ptrs, args.strcmpfun_for_sorting? args.strcmpfun_for_sorting: strcmp);
+    nct__sort_str(sorted, match, num, NULL, 0, ptrs, args.strcmpfun_for_sorting? args.strcmpfun_for_sorting: strcmp);
 
-    if (args.fun) {
+    /*if (args.fun) {
 	free(*args.dest);
 	*args.dest = sorted_dest;
-    }
+    }*/
 
-    if (savegroups) {
-	*args.groups_dest = saved_groups_sorted;
+    if (args.nmatch) {
+	argsp->groups_out = saved_groups_sorted;
 	free(saved_groups); // free ptrptr, all single ptrs were copied to sorted ptrptr
     }
 
-    if (args.dirnamelen)
-	*args.dirnamelen = dlen+1;
+    argsp->dirnamelen_out = dlen+1;
 
     free(match);
     free(dirname);
