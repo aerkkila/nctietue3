@@ -212,7 +212,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
 nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
 
-/* see nct_mktime0 */
+/* see nct_timegm0 */
 long long nct_convert_time_anyd(time_t time, nct_anyd units);
 nct_var* nct_convert_timeunits(nct_var* var, const char* units);
 
@@ -334,7 +334,7 @@ nct_var* nct_interpolate_to(nct_var* fromvar, nct_var* tovar, int unused);
    and fills timetm according to that
    and unit with enumeration of time unit (days, seconds, etc.).
    Returns nonzero if interpreting fails, 0 on success.
-   For form of the attribute, see nct_mktime0. */
+   For form of the attribute, see nct_timegm0. */
 int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* unit);
 
 int nct_link_data(nct_var*, nct_var*);
@@ -363,6 +363,7 @@ nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end);
 /* Use nct_load_instead. */
 nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_load instead.")));
 
+struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
 /* Calls nct_set_start making both timevariables to start at the same time.
@@ -374,9 +375,10 @@ long nct_match_starttime(nct_var*, nct_var*);
 long nct_match_endtime(nct_var*, nct_var*);
 
 nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
+nct_anyd nct_timegm(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
 
 /*
- * See also nct_localtime and nct_mktime.
+ * See also nct_gmtime, nct_timegm, nct_localtime, nct_mktime, nct_mktime0
  * Arguments:
  *	var: a variable which must contain attribute "units" with form of "$units since $epoch"
  *		$units is seconds, days, etc.
@@ -386,6 +388,10 @@ nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t i
  *	ret.d = Enumeration of the recognized time unit or -1 on error. See also nct_get_interval_ms.
  *	ret.a.t = unix time of $epoch.
  */
+nct_anyd nct_timegm0(const nct_var* var, struct tm* tm);
+#define nct_timegm0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
+nct_anyd nct_timegm0_nofail(const nct_var* var, struct tm* tm); // Failing is not an error in this function.
+
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
 #define nct_mktime0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
 nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is not an error in this function.

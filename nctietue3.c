@@ -551,17 +551,17 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
     if(!strcmp(att->value, units))
 	return var; // already correct
     time_t sec0, sec1;
-    nct_anyd time0_anyd = nct_mktime0(var, NULL);
+    nct_anyd time0_anyd = nct_timegm0(var, NULL);
     if(time0_anyd.d < 0)
 	return NULL;
-    sec0 = mktime(nct_localtime(1, time0_anyd)) - mktime(nct_localtime(0, time0_anyd)); // days -> 86400 etc.
+    sec0 = timegm(nct_gmtime(1, time0_anyd)) - timegm(nct_gmtime(0, time0_anyd)); // days -> 86400 etc.
     if(att->freeable & nct_ref_content)
 	free(att->value);
 
     /* change the attribute */
     att->value = strdup(units);
     att->freeable |= nct_ref_content;
-    nct_anyd time1_anyd = nct_mktime0(var, NULL); // different result than time0_anyd, since att has been changed
+    nct_anyd time1_anyd = nct_timegm0(var, NULL); // different result than time0_anyd, since att has been changed
     if(time1_anyd.d < 0)
 	return NULL;
 
@@ -572,7 +572,7 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
 	    nct_put_interval(var, 0, 1);
 	}
 
-    sec1 = mktime(nct_localtime(1, time1_anyd)) - mktime(nct_localtime(0, time1_anyd)); // days -> 86400 etc.
+    sec1 = timegm(nct_gmtime(1, time1_anyd)) - timegm(nct_gmtime(0, time1_anyd)); // days -> 86400 etc.
     int len = var->len;
     switch (var->dtype) {
 	case NC_FLOAT:
@@ -1515,12 +1515,81 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
     return result;
 }
 
+/* In nct_gmtime, the argument (nct_anyd)time0 should be the return value from nct_gmtime0.
+   The right static function (nct_gmtime_$timestep) is called based on that. */
+static struct tm* nct_gmtime_milliseconds(long timevalue, time_t time0) {
+    time0 += timevalue/1000;
+    return gmtime(&time0);
+}
+static struct tm* nct_gmtime_seconds(long timevalue, time_t time0) {
+    time0 += timevalue;
+    return gmtime(&time0);
+}
+static struct tm* nct_gmtime_minutes(long timevalue, time_t time0) {
+    time0 += timevalue*60;
+    return gmtime(&time0);
+}
+static struct tm* nct_gmtime_hours(long timevalue, time_t time0) {
+    time0 += timevalue*3600;
+    return gmtime(&time0);
+}
+static struct tm* nct_gmtime_days(long timevalue, time_t time0) {
+    time0 += timevalue*86400;
+    return gmtime(&time0);
+}
+#define TIMEUNIT(arg) [nct_##arg]=nct_gmtime_##arg,
+
+struct tm* nct_gmtime(long timevalue, nct_anyd time0) {
+    static struct tm*(*fun[])(long, time_t) = { TIMEUNITS }; // array of pointers to the static functions above
+    return fun[time0.d](timevalue, time0.a.t);               // a call to the right function: nct_gmtime_$timestep
+}
+#undef TIMEUNIT
+
+nct_anyd nct_timegm(const nct_var* var, struct tm* timetm, nct_anyd* epoch, size_t ind) {
+    struct tm timetm_buf;
+    int d;
+    if (!timetm)
+	timetm = &timetm_buf;
+    if (!epoch) {
+	nct_anyd any = nct_timegm0(var, timetm);
+	*timetm = *nct_gmtime(nct_get_integer(var, ind), any);
+	d = any.d;
+    }
+    else {
+	*timetm = *nct_gmtime(nct_get_integer(var, ind), *epoch);
+	d = epoch->d;
+    }
+    return (nct_anyd){.a.t=timegm(timetm), .d=d};
+}
+
+nct_anyd nct_timegm0(const nct_var* var, struct tm* timetm) {
+    struct tm tm_;
+    int ui;
+    if(!timetm)
+	timetm = &tm_;
+    if (nct_interpret_timeunit(var, timetm, &ui))
+	return (nct_anyd){.d=-1};
+    return (nct_anyd){.a.t=timegm(timetm), .d=ui};
+}
+
+nct_anyd nct_timegm0_nofail(const nct_var* var, struct tm* tm) {
+    FILE* stderr0 = nct_stderr;
+    //int act0 = nct_error_action;
+    nct_stderr = fopen("/dev/null", "a");
+    //nct_error_action = nct_pass;
+    nct_anyd result = nct_timegm0(var, tm);
+    fclose(nct_stderr);
+    nct_stderr = stderr0;
+    //nct_error_action = act0;
+    return result;
+}
+
 long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     nct_var* vars[] = {timevar0, timevar1};
     nct_anyd time[2];
 
     for(int i=0; i<2; i++) {
-	time[i] = nct_mktime(vars[i], NULL, NULL, 0);
+	time[i] = nct_timegm(vars[i], NULL, NULL, 0);
 	if (time[i].d < 0)
 	    nct_return_error(-1);
     }
@@ -1537,7 +1606,7 @@ long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
     nct_anyd time[2];
 
     for(int i=0; i<2; i++) {
-	time[i] = nct_mktime(vars[i], NULL, NULL, vars[i]->len-1);
+	time[i] = nct_timegm(vars[i], NULL, NULL, vars[i]->len-1);
 	if (time[i].d < 0)
 	    nct_return_error(-1);
     }
