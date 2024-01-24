@@ -545,9 +545,10 @@ nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
 struct nct_mf_regex_args {
     const char* restrict regex;
-    int regex_cflags, nct_readflags;
-    void *strcmpfun_for_sorting;
+    int regex_cflags;
     char* restrict concat_args;
+    int nct_readflags;
+    void *strcmpfun_for_sorting;
 
     /* This nonsense is now unnecessary. Use groups_out instead. */
     //void (*fun)(const char* restrict, int, regmatch_t *pmatch, void*);
@@ -560,17 +561,23 @@ struct nct_mf_regex_args {
 };
 
 /* Same as below but without readflags. */
-nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim) __attribute__((deprecated));
-nct_set* nct_read_mfnc_regex_strcmp(const char* filename_regex, int regex_cflags, char* concatdim, void *strcmpfun) __attribute__((deprecated));
+nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
 nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args*);
+
+/* Following is a trick that allows optional and keyword arguments for nct_read_mfnc_regex_opt.
+ *	nct_set* set = nct_read_mfnc_regex_opt("foo\\([1-9]*\\)\\.nc", .nct_readflags=nct_rcoord, .nmatch=2, .return_groups=1);
+ */
+static inline nct_set* nct_read_mfnc_regex_opt_(struct nct_mf_regex_args args) {
+    return nct_read_mfnc_regex_args(&args);
+}
+#define nct_read_mfnc_regex_opt(...) nct_read_mfnc_regex_opt_((struct nct_mf_regex_args){__VA_ARGS__});
+
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.
    This calls nct_read_mfnc_ptr after having converted filenames into form of its argument. */
 nct_set* nct_read_mfnc_ptrptr(char** filenames, int n, char* concatdim);
 
-nct_set* nct_read_mfncf_regex(const char* filename_regex, int readflags, int regex_cflags, char* concatdim);
-nct_set* nct_read_mfncf_regex_strcmp(const char* filename_regex, int readflags, int regex_cflags, char* concatdim, void *strcmpfun) __attribute__((deprecated));
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfncf_ptr(const char* filenames, int readflags, int n, char* concatdim);
 /* If n is negative, then filenames must be null-terminated.

@@ -2047,38 +2047,6 @@ nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* conca
     return nct_read_mfnc_regex_args(&args);
 }
 
-nct_set* nct_read_mfnc_regex_strcmp(const char* filename, int regex_cflags, char* concat_args, void *strcmpfun) {
-    struct nct_mf_regex_args args = {
-	.regex = filename,
-	.regex_cflags = regex_cflags,
-	.concat_args = concat_args,
-	.nct_readflags = nct_readflags,
-	.strcmpfun_for_sorting = strcmpfun,
-    };
-    return nct_read_mfnc_regex_args(&args);
-}
-
-nct_set* nct_read_mfncf_regex(const char* filename, int readflags, int regex_cflags, char* concat_args) {
-    struct nct_mf_regex_args args = {
-	.regex = filename,
-	.regex_cflags = regex_cflags,
-	.concat_args = concat_args,
-	.nct_readflags = readflags,
-    };
-    return nct_read_mfnc_regex_args(&args);
-}
-
-nct_set* nct_read_mfncf_regex_strcmp(const char* filename, int readflags, int regex_cflags, char* concat_args, void *strcmpfun) {
-    struct nct_mf_regex_args args = {
-	.regex = filename,
-	.regex_cflags = regex_cflags,
-	.concat_args = concat_args,
-	.nct_readflags = readflags,
-	.strcmpfun_for_sorting = strcmpfun,
-    };
-    return nct_read_mfnc_regex_args(&args);
-}
-
 /* The core read regex function. */
 nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
     char *names = nct__get_filenames_args(args);
