@@ -30,6 +30,7 @@ static int my_isnan_double(double f) {
 #endif
 
 void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
+void nct_verbose_line_ending(); // global but hidden: not in nctietue3.h
 
 static void nct_print_datum_@nctype(const void* vdatum) {
     ctype datum = *(ctype*)vdatum;
@@ -145,12 +146,17 @@ void* nct_get_interpolated_@nctype(const nct_var* var, int idim, const nct_var* 
        naffected   = |e4|*|e3|
        oldcyclelen = |e4|*|e3|*|e2(old)|
        nrepeat	   = |e0|*|e1| */
-    size_t naffected = nct_get_len_from(var, idim+1);
-    size_t oldcyclelen = naffected * frdimlen;
-    size_t nrepeat = var->len / oldcyclelen,
+    long naffected = nct_get_len_from(var, idim+1);
+    long oldcyclelen = naffected * frdimlen;
+    long nrepeat = var->len / oldcyclelen,
 	   inew = 0;
 
-    for (int rep=0; rep<nrepeat; rep++) {
+    for (long rep=0; rep<nrepeat; rep++) {
+	if (nct_verbose) {
+	    printf("interpolating (%s) %li / %li", var->name, rep+1, nrepeat);
+	    nct_verbose_line_ending();
+	}
+
 	for (int inewdim=0; inewdim<todimlen; inewdim++) {
 	    double targetcoord = nct_get_floating(todim, inewdim);
 	    int ihigher = nct_find_sorted(frdim, targetcoord, 1);

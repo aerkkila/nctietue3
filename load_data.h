@@ -54,7 +54,7 @@ static void load_stream_partially(nct_var* var, loadinfo_t* info, const size_t* 
 	for (int i=1; i<var->nfiledims; i++)
 	    printf(" %zu", i<cutdim ? 1 : info->fcount[i]);
 	printf(")");
-	verbose_line_ending();
+	nct_verbose_line_ending();
     }
 
     long ret;
@@ -138,7 +138,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 	}
 	length = new_length;
 	if (++ifile >= nfiles)
-	    break;
+	    goto error;
 	nct_var* cvar = from_concatlist(var, ifile-1);
 
 	if (!cvar->ndims) {
@@ -160,9 +160,10 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 	    add = cvar->len;
 	nct_set_start(dim0, old_start);
     }
-error:
+
+error: __attribute__((cold));
     nct_puterror("Didn't find starting location (%li) from %s\n", start, nct_get_filename(var->super));
-    return 1;
+    nct_return_error(1);
 }
 
 static void load_for_real(nct_var* var, loadinfo_t* info) {
@@ -242,7 +243,7 @@ static void print_progress(const nct_var* var, const loadinfo_t* info, size_t le
     for(int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fcount[i]);
     printf("}; from %i: %s", info->ifile, nct_get_filename(var->super));
-    verbose_line_ending();
+    nct_verbose_line_ending();
 }
 
 static int next_load(nct_var* var, loadinfo_t* info) {

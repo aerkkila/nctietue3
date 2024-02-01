@@ -327,9 +327,6 @@ long long	nct_getl_integer(const nct_var*, size_t);  // If the value has to be l
    otherwise a new variable is generated into tocoord->super. */
 nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_if_possible);
 
-/* Tovar will be filled with values interpolated from fromvar. */
-nct_var* nct_interpolate_to(nct_var* fromvar, nct_var* tovar, int unused);
-
 /* Reads attribute "units" from $var
    and fills timetm according to that
    and unit with enumeration of time unit (days, seconds, etc.).
@@ -512,7 +509,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  */
 enum {
     nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
-    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=1<<7, nct_requalfiles,
+    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=1<<7, nct_requalfiles=1<<8,
 };
 extern int nct_readflags;
 
@@ -598,6 +595,8 @@ void nct_rm_varatt_num(nct_var* var, int attnum);
 void nct_rm_varatt_name(nct_var* var, const char* attname);
 
 void nct_rm_var(nct_var* var);
+void nct_rm_dim(nct_var* var);
+int nct_rm_unused_dims(nct_set *set);
 
 /* Should be used before loading the variables.
  * The coordinate can be loaded before these functions.

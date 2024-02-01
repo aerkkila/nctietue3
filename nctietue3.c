@@ -183,7 +183,7 @@ void* nct_getfun_1[] = {
 
 static struct nct_fileinfo_t* _nct_link_fileinfo(struct nct_fileinfo_t*);
 
-static void verbose_line_ending() {
+void nct_verbose_line_ending() {
     if (nct_verbose == nct_verbose_overwrite)
 	printf("\033[K\r"), fflush(stdout);
     else if (nct_verbose == nct_verbose_newline)
@@ -348,7 +348,9 @@ static nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation)
 	return dim = NULL; }
     if (nct_get_vardimid(var, dimid) >= 0)
 	return dim;
+    long len = var->len;
     nct_add_vardim_first(var, dimid);
+    var->len = len; // concatenation will also increase length so let's not do it twice
     return dim;
 }
 
@@ -1215,17 +1217,6 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_
     return var;
 }
 
-/*
-nct_var* nct_interpolate_to(nct_var* fromvar, nct_var* tovar, int unused) {
-    nct_perhaps_load_partially(fromvar, 0, fromvar->len);
-    nct_allocate_varmem(tovar);
-    for (int idim=tovar->ndims-1; idim>=0; idim--) {
-	void *newdata = nct_get_interpolated(fromvar, idim, nct_get_vardimid(tovar, idim));
-    }
-#error Kesken
-    return tovar;
-}*/
-
 nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name) {
     double v0 = nct_get_floating(coord, 0);
     double v1 = nct_get_floating_last(coord, 1);
@@ -1976,7 +1967,7 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
 	ptr += strlen(ptr)+1;
 	if (nct_verbose) {
 	    printf("concatenating %i / %i", nfiles0 - nfiles, nfiles0);
-	    verbose_line_ending();
+	    nct_verbose_line_ending();
 	}
     }
     nct_free1(&original_set);
@@ -2002,7 +1993,7 @@ read_and_load:
 	ptr += strlen(ptr)+1;
 	if (nct_verbose) {
 	    printf("loading and concatenating %i / %i", nfiles0 - nfiles, nfiles0);
-	    verbose_line_ending();
+	    nct_verbose_line_ending();
 	}
     }
     return set;
@@ -2054,10 +2045,10 @@ nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
     if (nct_verbose) {
 	char* str = names;
 	printf("match from %s:", args->regex);
-	verbose_line_ending();
+	nct_verbose_line_ending();
 	while (*str) {
 	    printf("%s", str);
-	    verbose_line_ending();
+	    nct_verbose_line_ending();
 	    str += strlen(str) + 1;
 	}
     }
@@ -2090,6 +2081,29 @@ nct_var* nct_rewind(nct_var* var) {
     if (var->data)
 	var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
     return var;
+}
+
+void nct_rm_dim(nct_var* var) {
+    if (nct_iscoord(var))
+	nct_coord2dim(var);
+    _nct_drop_dim(var);
+    _nct_free_var(var);
+    free(var);
+}
+
+int nct_rm_unused_dims(nct_set *set) {
+    nct_var *delete[set->ndims];
+    int ndelete = 0;
+    for (int idim=0; idim<set->ndims; idim++) {
+	nct_foreach(set, var)
+	    if (nct_get_vardimid(var, idim) >= 0)
+		goto next;
+	delete[ndelete++] = set->dims[idim];
+next:;
+    }
+    for (int i=0; i<ndelete; i++)
+	nct_rm_dim(delete[i]);
+    return ndelete;
 }
 
 void nct_rm_varatt_num(nct_var* var, int num) {

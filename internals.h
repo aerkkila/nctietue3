@@ -28,11 +28,27 @@ static nct_var* _nct_concat_var(nct_var* v0, nct_var* v1, int dimid0, int howman
 /* Calling this alone does not free any memory. */
 static void _nct_drop_var(nct_var* var) {
     nct_set* super = var->super;
-    for(int i=nct_varid(var)+1; i<super->nvars; i++) {
+    for (int i=nct_varid(var)+1; i<super->nvars; i++) {
 	super->vars[i-1] = super->vars[i];
 	super->vars[i-1]->id_var--;
     }
     super->nvars--;
+}
+
+static void _nct_drop_dim(nct_var* dim) {
+    nct_set* super = dim->super;
+    int dimid = nct_dimid(dim);
+    for (int i=dimid+1; i<super->ndims; i++) {
+	super->dims[i-1] = super->dims[i];
+	super->dims[i-1]->id_dim--;
+    }
+    for (int ivar=0; ivar<super->nvars; ivar++) {
+	nct_var *var = super->vars[ivar];
+	for (int i=0; i<var->ndims; i++)
+	    if (var->dimids[i] > dimid)
+		var->dimids[i]--;
+    }
+    super->ndims--;
 }
 
 /* The dimension must be already expanded. */
