@@ -17,6 +17,8 @@ typedef int (*nct_ncget_t)(int,int,void*);
 typedef int (*nct_ncget_partial_t)(int, int, const size_t*, const size_t*, void*);
 typedef int (*nct_ncget_1_t)(int, int, const size_t*, void*);
 
+enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
+
 /* Use this to redirect error messages elsewhere than to stderr:
  *	char errormsg[512];
  *	nct_stderr = fmemopen(errormsg, 512, "w");
@@ -308,7 +310,7 @@ void		nct_get_varshape_list(const nct_var* var, ...); // size_t *lendim0, size_t
 int		nct_get_varid(const nct_set* restrict, const char* restrict);
 int		nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t		nct_get_len_from(const nct_var*, int startdim);
-long		nct_get_interval_ms(int timeunit_enumeration); // argument can be nct_mktime(args).d
+long		nct_get_interval_ms(enum nct_timeunit timeunit_enumeration); // argument can be nct_mktime(args).d
 FILE*		nct_get_stream(const nct_var*);
 const char*	nct_get_filename(const nct_set*);
 const char*	nct_get_filename_var(const nct_var* var);
@@ -329,10 +331,10 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_i
 
 /* Reads attribute "units" from $var
    and fills timetm according to that
-   and unit with enumeration of time unit (days, seconds, etc.).
+   and unit enum nct_timeunit (days, seconds, etc.).
    Returns nonzero if interpreting fails, 0 on success.
    For form of the attribute, see nct_timegm0. */
-int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* unit);
+int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int *unit);
 
 int nct_link_data(nct_var*, nct_var*);
 int nct_link_stream(nct_var* dest, nct_var* src);

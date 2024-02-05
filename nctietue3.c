@@ -56,7 +56,6 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 	ONE_TYPE(NC_DOUBLE, lf, double)
 
 /* Used similarly than the macro above. */
-enum {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 #define TIMEUNITS TIMEUNIT(milliseconds) TIMEUNIT(seconds) TIMEUNIT(minutes) TIMEUNIT(hours) TIMEUNIT(days)
 
 static long ms_per_timeunit[]	= {1,	1*1000,	60*1000,	3600*1000,	86400*1000};
@@ -1165,7 +1164,7 @@ size_t nct_get_len_from(const nct_var* var, int start) {
     return len;
 }
 
-long nct_get_interval_ms(int unit) {
+long nct_get_interval_ms(enum nct_timeunit unit) {
     if (unit < 0)
 	return -1;
     if (unit >= sizeof(ms_per_timeunit) / sizeof(ms_per_timeunit[0])) {
