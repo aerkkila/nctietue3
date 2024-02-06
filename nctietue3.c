@@ -1205,8 +1205,7 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_
     void* newdata = nct_get_interpolated(var, idim, todim);
 
     if (!inplace_if_possible || todim->super != var->super)
-	var = nct_ensure_unique_name(nct_copy_var(todim->super, var, 1));
-    nct_unlink_data(var);
+	var = nct_ensure_unique_name(nct_copy_var(todim->super, var, -1));
     var->data = newdata;
     var->dimids[idim] = nct_dimid(todim);
 
@@ -1952,7 +1951,8 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
     }
 
     /* The first set was already read above. */
-    while (*ptr) {
+    /* Don't loop as while (*ptr) to allow reading fewer files than available. */
+    while (nfiles) {
 	if (readflags & nct_requalfiles) {
 	    nct_copy(++setptr, &original_set, -1);
 	    setptr->fileinfo = nct_init_fileinfo(ptr);
@@ -1982,7 +1982,7 @@ read_and_load:
 	((struct nct_fileinfo_t*)set->fileinfo)->groups = groups[0];
     ((struct nct_fileinfo_t*)set->fileinfo)->dirnamelen = dirnamelen;
     ind = 0;
-    while (*ptr) {
+    while (nfiles) {
 	nct_readm_ncf(set1, ptr, readflags);
 	if (groups)
 	    ((struct nct_fileinfo_t*)set1.fileinfo)->groups = groups[++ind];
@@ -2041,6 +2041,8 @@ nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* conca
 nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
     char *names = nct__get_filenames_args(args);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
+    if (args->max_nfiles && num > args->max_nfiles)
+	num = args->max_nfiles;
     if (nct_verbose) {
 	char* str = names;
 	printf("match from %s:", args->regex);

@@ -548,15 +548,9 @@ struct nct_mf_regex_args {
     char* restrict concat_args;
     int nct_readflags;
     void *strcmpfun_for_sorting;
-
-    /* This nonsense is now unnecessary. Use groups_out instead. */
-    //void (*fun)(const char* restrict, int, regmatch_t *pmatch, void*);
-    //int size1dest;
-    //void **dest;
-
     int nmatch, return_groups;
     regmatch_t **groups_out;
-    int dirnamelen_out;
+    int dirnamelen_out, max_nfiles;
 };
 
 /* Same as below but without readflags. */
