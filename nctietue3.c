@@ -891,6 +891,14 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     }
 }
 
+size_t nct_find_time(const nct_var* var, time_t time, int right) {
+    struct tm tm0;
+    nct_anyd epoch = nct_timegm0(var, &tm0);
+    long diff_s = time - epoch.a.t;
+    double tofind = diff_s * 1000 / nct_get_interval_ms(epoch.d);
+    return nct_find_sorted(var, tofind, right);
+}
+
 nct_var* nct_firstvar(const nct_set* set) {
     int nvars = set->nvars;
     for(int i=0; i<nvars; i++)
@@ -1586,7 +1594,7 @@ long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     int smaller = time[1].a.t < time[0].a.t;
     long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
     long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_set_start(vars[smaller], diff_n);
+    nct_set_rstart(vars[smaller], diff_n);
     return diff_n;
 }
 
@@ -2193,6 +2201,11 @@ nct_var* nct_iterate_concatlist(nct_var* var) {
     if (iconcat++ >= n_concat)
 	return NULL;
     return from_concatlist(svar, iconcat-1);
+}
+
+nct_var* nct_set_rstart(nct_var* dim, long arg) {
+    long new = arg + dim->rule[nct_r_start].arg.lli;
+    return nct_set_start(dim, new);
 }
 
 nct_var* nct_set_start(nct_var* dim, size_t arg) {

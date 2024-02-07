@@ -279,6 +279,7 @@ char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 size_t nct_find_sorted_(const nct_var* var, double value, int right);
 #define _nct_find_sorted(var, value, right, ...) nct_find_sorted_(var, value, right)
 #define nct_find_sorted(...) _nct_find_sorted(__VA_ARGS__, 0)
+size_t nct_find_time(const nct_var* timevar, time_t time, int right);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);
@@ -365,7 +366,7 @@ nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_l
 struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
-/* Calls nct_set_start making both timevariables to start at the same time.
+/* Calls nct_set_rstart making both timevariables to start at the same time.
    Returns the number of timesteps removed or negative on error. */
 long nct_match_starttime(nct_var*, nct_var*);
 
@@ -598,7 +599,8 @@ int nct_rm_unused_dims(nct_set *set);
  * The coordinate can be loaded before these functions.
  */
 nct_var* nct_set_length(nct_var* coord, size_t length);
-nct_var* nct_set_start(nct_var* coord, size_t offset);
+nct_var* nct_set_start(nct_var* coord, size_t offset); // sets absolute start regardless of current start
+nct_var* nct_set_rstart(nct_var* coord, long offset); // relative: adds offset to current start
 nct_var* nct_shorten_length(nct_var* coord, size_t arg); // returns NULL if (arg > coord->len)
 
 /* Causes data to be loaded from the FILE* when nct_load is called.
