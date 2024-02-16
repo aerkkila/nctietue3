@@ -242,7 +242,7 @@ static void print_progress(const nct_var* var, const loadinfo_t* info, size_t le
     printf("}; count={%li", info->fcount[0]);
     for(int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fcount[i]);
-    printf("}; from %i: %s", info->ifile, nct_get_filename(var->super));
+    printf("}; from %i: %s (%s)", info->ifile, nct_get_filename(var->super), var->name);
     nct_verbose_line_ending();
 }
 
