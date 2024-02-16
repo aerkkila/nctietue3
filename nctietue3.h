@@ -279,7 +279,15 @@ char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 size_t nct_find_sorted_(const nct_var* var, double value, int right);
 #define _nct_find_sorted(var, value, right, ...) nct_find_sorted_(var, value, right)
 #define nct_find_sorted(...) _nct_find_sorted(__VA_ARGS__, 0)
-size_t nct_find_time(const nct_var* timevar, time_t time, int right);
+
+/* beforeafter:
+ *  -2: ret < find
+ *  -1: ret ≤ find
+ *   0:	ret ≥ find
+ *   1: ret > find
+ */
+size_t nct_find_time(const nct_var* timevar, time_t time, int beforeafter);
+size_t nct_find_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);
@@ -598,9 +606,11 @@ int nct_rm_unused_dims(nct_set *set);
 /* Should be used before loading the variables.
  * The coordinate can be loaded before these functions.
  */
+nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter);
 nct_var* nct_set_length(nct_var* coord, size_t length);
 nct_var* nct_set_start(nct_var* coord, size_t offset); // sets absolute start regardless of current start
 nct_var* nct_set_rstart(nct_var* coord, long offset); // relative: adds offset to current start
+nct_var* nct_set_timestart_str(nct_var* coord, const char *timestr, int beforeafter);
 nct_var* nct_shorten_length(nct_var* coord, size_t arg); // returns NULL if (arg > coord->len)
 
 /* Causes data to be loaded from the FILE* when nct_load is called.
@@ -725,6 +735,8 @@ char* nct__get_filenames_args(struct nct_mf_regex_args*);
 
 #define nct__getn_filenames() ((intptr_t)nct__get_filenames_args(NULL))
 #define nct__forstr(names, str) for(char* str=((char*)names); *str; str+=strlen(str)+1) // iterating over the result of nct__get_filenames
+
+int nct__read_timestr(const char *timestr, struct tm* timetm_out); // in: "2001-01-01 [12.04.31]" returns 0 on success
 
 /* src has the form of result of nct__get_filenames.
    n is optional: if -1 if given, n is calculated.

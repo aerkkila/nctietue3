@@ -891,12 +891,21 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     }
 }
 
-size_t nct_find_time(const nct_var* var, time_t time, int right) {
+size_t nct_find_time(const nct_var* var, time_t time, int beforeafter) {
     struct tm tm0;
     nct_anyd epoch = nct_timegm0(var, &tm0);
     long diff_s = time - epoch.a.t;
     double tofind = diff_s * 1000 / nct_get_interval_ms(epoch.d);
-    return nct_find_sorted(var, tofind, right);
+    size_t res = nct_find_sorted(var, tofind, beforeafter==1);
+    res -= beforeafter == -2;
+    res -= beforeafter == -1 && nct_register == 0;
+    return res;
+}
+
+size_t nct_find_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
+    struct tm tm;
+    nct__read_timestr(timestr, &tm);
+    return nct_find_time(dim, timegm(&tm), beforeafter);
 }
 
 nct_var* nct_firstvar(const nct_set* set) {
@@ -1251,27 +1260,10 @@ int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit)
 	return 1; }
 
     units += strlen(nct_timeunits[ui]);
-    int year, month, day, hms[3]={0}, len;
-    for(; *units; units++)
-	if('0' <= *units && *units <= '9') {
-	    if(sscanf(units, "%d-%d-%d%n", &year, &month, &day, &len) != 3) {
-		nct_puterror("Could not read %s since WHEN (%s)", nct_timeunits[ui], units);
-		return 1; }
-	    break;
-	}
-    units += len;
 
-    /* Optionally read hours, minutes, seconds. */
-    for(int i=0; i<3 && *units; i++) {
-	if(sscanf(units, "%2d", hms+i) != 1)
-	    break;
-	units += 2;
-	while(*units && !('0' <= *units && *units <= '9')) units++;
-    }
-    *timetm = (struct tm){.tm_year=year-1900, .tm_mon=month-1, .tm_mday=day,
-			  .tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};
-    if (timeunit)
-	*timeunit = ui;
+    if (nct__read_timestr(units, timetm))
+	return 1;
+    *timeunit = ui;
     return 0;
 }
 
@@ -2175,6 +2167,11 @@ nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
     return var0;
 }
 
+nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter) {
+    size_t ind = nct_find_time_str(dim, timestr, beforeafter);
+    return nct_set_length(dim, ind);
+}
+
 nct_var* nct_set_length(nct_var* dim, size_t arg) {
     dim->len = arg;
     setrule(dim->super, nct_r_start); // start is used to mark length as well
@@ -2218,6 +2215,11 @@ nct_var* nct_set_start(nct_var* dim, size_t arg) {
     nct_foreach(dim->super, var)
 	var->len = nct_get_len_from(var, 0);
     return dim;
+}
+
+nct_var* nct_set_timestart_str(nct_var *dim, const char *timestr, int beforeafter) {
+    size_t ind = nct_find_time_str(dim, timestr, beforeafter);
+    return nct_set_rstart(dim, ind);
 }
 
 void nct_set_stream(nct_var* var, FILE* f) {
@@ -2448,6 +2450,30 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
     free(dirname);
     regfree(&reg);
     return sorted;
+}
+
+int nct__read_timestr(const char *timestr, struct tm* timetm) {
+    int year, month, day, hms[3]={0}, len;
+    const char *str = timestr;
+    for(; *str; str++)
+	if('0' <= *str && *str <= '9') {
+	    if(sscanf(str, "%d-%d-%d%n", &year, &month, &day, &len) != 3) {
+		nct_puterror("Could not read timestring (%s)", timestr);
+		return 1; }
+	    break;
+	}
+    str += len;
+
+    /* Optionally read hours, minutes, seconds. */
+    for(int i=0; i<3 && *str; i++) {
+	if(sscanf(str, "%2d", hms+i) != 1)
+	    break;
+	str += 2;
+	while(*str && !('0' <= *str && *str <= '9')) str++;
+    }
+    *timetm = (struct tm){.tm_year=year-1900, .tm_mon=month-1, .tm_mday=day,
+			  .tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};
+    return 0;
 }
 
 static int isnumber(char a) {
