@@ -162,7 +162,7 @@ struct nct_var {
     long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
     nc_type	dtype;
     int		not_freeable;
-    unsigned char* nusers; // the first user is not counted
+    int 	*nusers, *nusers_stream; // the first user is not counted
     void*	data;
     unsigned	rules; // a bitmask of rules which are in use
     nct_rule	rule[nct_r_nrules];

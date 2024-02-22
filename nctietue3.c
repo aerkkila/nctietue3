@@ -77,34 +77,6 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
 	}							\
     } while(0)
 
-/* This is the fakeheap. We need a small amount of allocatable memory to keep track of linked variables. */
-static int fakeheap_counter=0;
-#define nct_nlinked_max 256
-static char fakeheap[nct_nlinked_max] = {-1};
-
-static void* calloc_fakeheap() {
-    if (fakeheap_counter < nct_nlinked_max) {
-	char* ptr = fakeheap + fakeheap_counter++;
-	*ptr = 0;
-	return ptr;
-    }
-    for (int i=0; i<nct_nlinked_max; i++)
-	if (fakeheap[i] == -1) {
-	    fakeheap[i] = 0;
-	    return fakeheap+i;
-	}
-    nct_puterror("Maximum number of different links (%i) reached\n", nct_nlinked_max);
-    nct_return_error(NULL);
-}
-
-static void free_fakeheap(void* ptr) {
-    if (!ptr)
-	return;
-    *(char*)ptr = -1;
-    while (fakeheap_counter > 0 && fakeheap[fakeheap_counter-1] == -1)
-	fakeheap_counter--;
-}
-
 int nct_readflags, nct_ncret, nct_error_action, nct_verbose, nct_register;
 FILE* nct_stderr;
 void (*nct_after_load)(nct_var*, void*, size_t, const size_t*, const size_t*) = NULL;
@@ -1269,7 +1241,7 @@ int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit)
 
 int nct_link_data(nct_var* dest, nct_var* src) {
     if (!src->nusers)
-	src->nusers = calloc_fakeheap();
+	src->nusers = calloc(1, sizeof(int));
     ++*src->nusers;
     dest->data = src->data;
     dest->nusers = src->nusers;
@@ -1277,24 +1249,20 @@ int nct_link_data(nct_var* dest, nct_var* src) {
     return 0;
 }
 
-char* get_stream_nusers_p(const nct_var* var) {
-    if (var->rule[nct_r_stream].capacity == 0)
-	return NULL;
-    return fakeheap + var->rule[nct_r_stream].n;
+int* get_stream_nusers_p(const nct_var* var) {
+    return var->nusers_stream;
 }
 
-void set_stream_nusers_p(nct_var* var, char* ptr) {
-    int n = ptr - fakeheap;
-    var->rule[nct_r_stream].capacity = 1;
-    var->rule[nct_r_stream].n = n;
+void set_stream_nusers_p(nct_var* var, int* ptr) {
+    var->nusers_stream = ptr;
 }
 
 int nct_link_stream(nct_var* dest, nct_var* src) {
     if (!hasrule(src, nct_r_stream))
 	return -1;
-    char* nusers = get_stream_nusers_p(src);
+    int* nusers = get_stream_nusers_p(src);
     if (!nusers) {
-	nusers = calloc_fakeheap();
+	nusers = calloc(1, sizeof(int));
 	set_stream_nusers_p(src, nusers);
     }
     ++*nusers;
@@ -2233,9 +2201,9 @@ void nct_unlink_data(nct_var* var) {
 	free(nct_rewind(var)->data);
     if (var->nusers) {
 	if (!*var->nusers)
-	    free_fakeheap(var->nusers);
+	    free(var->nusers);
 	else
-	    (*var->nusers)--;
+	    --*var->nusers;
     }
     var->data = var->nusers = NULL;
     var->capacity = 0;
@@ -2245,13 +2213,13 @@ void nct_unlink_data(nct_var* var) {
 void nct_unlink_stream(nct_var* var) {
     if (!hasrule(var, nct_r_stream))
 	return;
-    char* nusers = get_stream_nusers_p(var);
+    int* nusers = get_stream_nusers_p(var);
     if (!nusers || !*nusers) {
 	fclose(nct_get_stream(var));
-	free_fakeheap(nusers);
+	free(nusers);
     }
     else
-	(*nusers)--;
+	--*nusers;
     rmrule(var, nct_r_stream);
 }
 
