@@ -25,15 +25,16 @@ static int my_isnan_double(double f) {
     return (bits & exponent) == exponent;
 }
 
+void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
+void nct_verbose_line_ending(); // global but hidden: not in nctietue3.h
+
 @startperl // entry for the perl program
 
 #define ctype @ctype
 #define form @form
 #define __nctype__ @nctype
 
-void nct_allocate_varmem(nct_var*); // global but hidden: not in nctietue3.h
-void nct_verbose_line_ending(); // global but hidden: not in nctietue3.h
-
+@begin_stringalso
 void nct_print_datum_@nctype(const void* vdatum) {
     @ctype datum = *(@ctype*)vdatum;
 #if __nctype__ == NC_FLOAT || __nctype__ == NC_DOUBLE
@@ -50,10 +51,10 @@ void nct_print_datum_@nctype(const void* vdatum) {
 }
 
 void nct_print_datum_at_@nctype(const void* vdatum, long pos) {
-    nct_print_datum_@nctype(((ctype*)vdatum)+pos);
+    nct_print_datum_@nctype(((@ctype*)vdatum)+pos);
 }
 
-static void _printhelper_@nctype(ctype* data, long i, long len) {
+static void _printhelper_@nctype(@ctype* data, long i, long len) {
     if (len < 1)
 	return;
     for(; i<len-1; i++) {
@@ -61,15 +62,6 @@ static void _printhelper_@nctype(ctype* data, long i, long len) {
 	printf(", ");
     }
     nct_print_datum_@nctype(data+len-1);
-}
-
-void nct_add_@nctype(nct_var *var, size_t i, double value) {
-    ((@ctype*)var->data)[i] += value;
-}
-
-void nct_add_all_@nctype(nct_var *var, double value) {
-    for (long i=var->len-1; i>=0; i--)
-	((@ctype*)var->data)[i] += value;
 }
 
 void nct_print_data_@nctype(nct_var* var) {
@@ -87,6 +79,16 @@ void nct_print_data_@nctype(nct_var* var) {
     nct_readflags = old;
     nct_perhaps_load_partially(var, len-8, len);
     _printhelper_@nctype(var->data, len-8-var->startpos, len-var->startpos);
+}
+@end_stringalso
+
+void nct_add_@nctype(nct_var *var, size_t i, double value) {
+    ((@ctype*)var->data)[i] += value;
+}
+
+void nct_add_all_@nctype(nct_var *var, double value) {
+    for (long i=var->len-1; i>=0; i--)
+	((@ctype*)var->data)[i] += value;
 }
 
 ctype* nct_range_@nctype(ctype i0, ctype i1, ctype gap) {

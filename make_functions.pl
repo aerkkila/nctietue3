@@ -1,10 +1,10 @@
 #!/bin/env perl
 use warnings;
 @enumtypes  = ('NC_BYTE', 'NC_UBYTE', 'NC_CHAR', 'NC_SHORT', 'NC_USHORT', 'NC_INT', 'NC_UINT',
-	     'NC_INT64', 'NC_UINT64', 'NC_FLOAT', 'NC_DOUBLE');
-@formats  = ('hhi', 'hhu', 'c', 'hi', 'hu', 'i', 'u', 'lli', 'llu', 'f', 'lf');
+	     'NC_INT64', 'NC_UINT64', 'NC_FLOAT', 'NC_DOUBLE', 'NC_STRING');
+@formats  = ('hhi', 'hhu', 'c', 'hi', 'hu', 'i', 'u', 'lli', 'llu', 'f', 'lf', 's');
 @ctypes   = ('char', 'unsigned char', 'char', 'short', 'unsigned short', 'int', 'unsigned',
-             'long long', 'long long unsigned', 'float', 'double');
+             'long long', 'long long unsigned', 'float', 'double', 'char*');
 #@uctypes  = ('unsigned char', 'unsigned char', 'unsigned char', 'unsigned short', 'unsigned short', 'unsigned', 'unsigned',
 #             'long long unsigned', 'long long unsigned', 'float', 'double');
 
@@ -12,7 +12,7 @@ sub make_wrapper_function {
     ($type, $name, $args) = @_;
 
     # create a function array
-    $ntypes = @enumtypes;
+    $ntypes = @enumtypes - 1 + $stringalso;
     print file_out "static $type (*__$name"."[])($args) = {\n";
     for(my $j=0; $j<$ntypes; $j++) {
 	print file_out "    [$enumtypes[$j]] = $name"."_$enumtypes[$j],\n"; }
@@ -61,8 +61,18 @@ sub main {
     }
     $startpos = tell file_in;
 
+    # Repeat the file for each datatype.
     for (my $i=0; $i<@enumtypes; $i++) {
 	while (<file_in>) {
+	    if ($_ =~ /^\@begin_stringalso\s*.*/) { #*
+		$stringalso = 1;
+		next;
+	    }
+	    if ($_ =~ /^\@end_stringalso\s*.*/) { #*
+		$stringalso = 0;
+		next;
+	    }
+	    if ($enumtypes[$i] =~ NC_STRING and not $stringalso) { next; }
 	    $_ =~ s/\@nctype/$enumtypes[$i]/g;
 	    $_ =~ s/\@ctype/$ctypes[$i]/g;
 	    $_ =~ s/\@form/$formats[$i]/g;
@@ -73,8 +83,18 @@ sub main {
     }
 
     my $first = 1;
+    our $stringalso = 0;
 
+    # Generate the function arrays and wrapper functions
     while (<file_in>) {
+	if ($_ =~ /^\@begin_stringalso\s*.*/) { #*
+	    $stringalso = 1;
+	    next;
+	}
+	if ($_ =~ /^\@end_stringalso\s*.*/) { #*
+	    $stringalso = 0;
+	    next;
+	}
 	($type, $name, $args) = ($_ =~ /(\S+.*)\s+(\S+)_\@nctype*\((.*)\)\s*{/g); #+
 
 	if (!$type || !$name) { next; }
