@@ -2009,8 +2009,15 @@ nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* conca
 nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
     char *names = nct__get_filenames_args(args);
     int num = nct__getn_filenames(); // returns the number of files read on previous call
-    if (args->max_nfiles && num > args->max_nfiles)
+
+    if (args->max_nfiles && num > args->max_nfiles) {
+	/* If some files are omitted, their capture groups will not be freed in _nct_unlink_fileinfo. */
+	if (args->groups_out)
+	    for (int i=args->max_nfiles; i<num; i++)
+		free(args->groups_out[i]);
 	num = args->max_nfiles;
+    }
+
     if (nct_verbose) {
 	char* str = names;
 	printf("match from %s:", args->regex);
