@@ -2283,10 +2283,19 @@ int nct_create_nc_def(nct_set* src, const char* name)		{ return _nct_create_nc(s
 int nct_createcoords_nc(const nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords); }
 int nct_createcoords_nc_mut(nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords|_mutable); }
 int nct_createcoords_nc_def(nct_set* src, const char* name)	{ return _nct_create_nc(src, name, _createcoords|_mutable|_defonly); }
-void nct_write_nc(const nct_set* src, const char* name) {
+
+const nct_set* nct_write_nc(const nct_set* src, const char* name) {
     startpass;
     ncfunk(nc_close, nct_create_nc(src, name));
     endpass;
+    return src;
+}
+
+nct_set* nct_write_mut_nc(nct_set* src, const char* name) {
+    startpass;
+    ncfunk(nc_close, nct_create_nc(src, name));
+    endpass;
+    return src;
 }
 
 char* nct__get_filenames(const char* restrict regex, int flags) {

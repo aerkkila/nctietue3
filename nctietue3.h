@@ -663,7 +663,11 @@ void nct_unlink_data(nct_var*);
 
 void nct_unlink_stream(nct_var*);
 
-void nct_write_nc(const nct_set*, const char*);
+const nct_set* nct_write_nc(const nct_set*, const char*);
+/* mut is needed when one wants to free the result in a nested function call:
+ *	nct_free1(nct_write_mut_nc(nct_create_simple(malloc(100*150), NC_BYTE, 100, 150), "test.nc"));
+ */
+nct_set* nct_write_mut_nc(nct_set* src, const char* name);
 
 /* Data functions:
    When data is accessed, a different function for each variable type is needed.
