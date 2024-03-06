@@ -1245,6 +1245,7 @@ int nct_link_data(nct_var* dest, nct_var* src) {
     ++*src->nusers;
     dest->data = src->data;
     dest->nusers = src->nusers;
+    dest->not_freeable = src->not_freeable;
     dest->rule[nct_r_start].arg.lli = src->rule[nct_r_start].arg.lli;
     return 0;
 }
