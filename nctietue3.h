@@ -74,6 +74,7 @@ extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t
 extern int nct_ncret, nct_register;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
+extern const short nct_typelen[];
 
 /* What happens on error besides writing an error message.
  * auto (default):

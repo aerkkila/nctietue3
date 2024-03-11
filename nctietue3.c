@@ -80,6 +80,11 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
 int nct_readflags, nct_ncret, nct_error_action, nct_verbose, nct_register;
 FILE* nct_stderr;
 void (*nct_after_load)(nct_var*, void*, size_t, const size_t*, const size_t*) = NULL;
+const short nct_typelen[] = {
+    [NC_BYTE]=1, [NC_UBYTE]=1, [NC_SHORT]=2, [NC_USHORT]=2,
+    [NC_INT]=4, [NC_UINT]=4, [NC_INT64]=8, [NC_UINT64]=8,
+    [NC_FLOAT]=4, [NC_DOUBLE]=8, [NC_CHAR]=1, [NC_STRING]=sizeof(void*)
+};
 
 const char* nct_error_color   = "\033[1;91m";
 const char* nct_varset_color  = "\033[1;35m";
