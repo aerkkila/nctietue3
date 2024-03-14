@@ -70,7 +70,8 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
 
 #define ncfunk_open(name, access, idptr)			\
     do {							\
-	if((nct_ncret = nc_open(name, access, idptr))) {	\
+	if ((nct_ncret = nc_open(name, access, idptr))) {	\
+	    nct_backtrace();					\
 	    ncerror(nct_ncret);					\
 	    fprintf(nct_stderr? nct_stderr: stderr, "    failed to open \"\033[1m%s\033[0m\"\n", (char*)name);	\
 	    nct_other_error;					\
@@ -86,13 +87,18 @@ const short nct_typelen[] = {
     [NC_FLOAT]=4, [NC_DOUBLE]=8, [NC_CHAR]=1, [NC_STRING]=sizeof(void*)
 };
 
-const char* nct_error_color   = "\033[1;91m";
-const char* nct_varset_color  = "\033[1;35m";
-const char* nct_varname_color = "\033[92m";
-const char* nct_dimname_color = "\033[44;92m";
-const char* nct_type_color    = "\033[93m";
-const char* nct_att_color     = "\033[3;38;5;159m";
-const char* nct_default_color = "\033[0m";
+const char* nct_backtrace_str = NULL;
+const char* nct_backtrace_file = NULL;
+int nct_backtrace_line = 0;
+
+const char* nct_error_color	= "\033[1;91m";
+const char* nct_backtrace_color	= "\033[38;5;178m";
+const char* nct_varset_color	= "\033[1;35m";
+const char* nct_varname_color	= "\033[92m";
+const char* nct_dimname_color	= "\033[44;92m";
+const char* nct_type_color	= "\033[93m";
+const char* nct_att_color	= "\033[3;38;5;159m";
+const char* nct_default_color	= "\033[0m";
 
 static void     _nct_free_var(nct_var*);
 static void	_nct_free_att(nct_att*);

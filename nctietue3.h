@@ -40,6 +40,10 @@ extern FILE* nct_stderr;
    */
 extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t *fstart, const size_t *fcount);
 
+extern const char *nct_backtrace_str; // see nct_bt for explanation
+extern const char *nct_backtrace_file;
+extern int nct_backtrace_line;
+
 #define nct_other_error switch(nct_error_action) {	\
     case nct_auto:				\
     case nct_interrupt: asm("int $3"); break;	\
@@ -52,8 +56,20 @@ extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t
     default: return val;				\
 }
 
-#define nct_puterror(...) do {	fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
-    				fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__); } while(0)
+#define nct_backtrace()		\
+    do {			\
+	if (nct_backtrace_str)	\
+	    fprintf(nct_stderr? nct_stderr: stderr, "%sError from%s %s %sat %s:%i:%s\n",		\
+		nct_backtrace_color, nct_default_color, nct_backtrace_str, 				\
+		nct_backtrace_color, nct_backtrace_file, nct_backtrace_line, nct_default_color);	\
+    } while (0)
+
+#define nct_puterror(...)	\
+    do {			\
+	nct_backtrace();	\
+	fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
+				fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__);	\
+    } while(0)
 
 #define ncerror(arg) fprintf(nct_stderr? nct_stderr: stderr, "%sNetcdf-error%s (%s: %i):\n    %s\n",	\
 			     nct_error_color, nct_default_color, __FILE__, __LINE__, nc_strerror(arg))
@@ -61,10 +77,22 @@ extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t
 #define ncfunk(fun, ...)			\
     do {					\
 	if((nct_ncret = fun(__VA_ARGS__))) {	\
+	    nct_backtrace();			\
 	    ncerror(nct_ncret);			\
 	    nct_other_error;			\
 	}					\
     } while(0)
+
+/* For better error messages:
+ *	nct_bt(nct_set *a = nct_read_ncf("file.nc", nct_rcoord))
+ * Now error message shows that nct_set *a = nct_read_ncf("file.nc", nct_rcoord) caused the error.
+ */
+#define nct_bt(...) 			\
+    nct_backtrace_str = #__VA_ARGS__;	\
+    nct_backtrace_file = __FILE__;	\
+    nct_backtrace_line = __LINE__;	\
+    __VA_ARGS__;			\
+    nct_backtrace_str = NULL
 
 /* bits to use in freeable or owner flags, e.g. (nct_att(a)).freeable = nct_ref_content */
 #define nct_ref_content	(1<<0)
@@ -74,6 +102,7 @@ extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t
 extern int nct_ncret, nct_register;
 extern const char* nct_error_color;
 extern const char* nct_default_color;
+extern const char* nct_backtrace_color;
 extern const short nct_typelen[];
 
 /* What happens on error besides writing an error message.
