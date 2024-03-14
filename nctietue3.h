@@ -287,8 +287,8 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right);
  *   0:	ret ≥ find
  *   1: ret > find
  */
-size_t nct_find_time(const nct_var* timevar, time_t time, int beforeafter);
-size_t nct_find_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
+long nct_find_time(const nct_var* timevar, time_t time, int beforeafter);
+long nct_find_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);

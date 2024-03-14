@@ -868,18 +868,18 @@ size_t nct_find_sorted_(const nct_var* var, double value, int right) {
     }
 }
 
-size_t nct_find_time(const nct_var* var, time_t time, int beforeafter) {
+long nct_find_time(const nct_var* var, time_t time, int beforeafter) {
     struct tm tm0;
     nct_anyd epoch = nct_timegm0(var, &tm0);
     long diff_s = time - epoch.a.t;
     double tofind = diff_s * 1000 / nct_get_interval_ms(epoch.d);
     size_t res = nct_find_sorted(var, tofind, beforeafter==1);
     res -= beforeafter == -2;
-    res -= beforeafter == -1 && nct_register == 0;
+    res -= beforeafter == -1 && nct_register;
     return res;
 }
 
-size_t nct_find_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
+long nct_find_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
     struct tm tm;
     nct__read_timestr(timestr, &tm);
     return nct_find_time(dim, timegm(&tm), beforeafter);
