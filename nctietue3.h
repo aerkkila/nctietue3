@@ -240,6 +240,25 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
 void nct_close_nc(int *ncid); // calls nc_close(ncid)
 
+/*
+concat(set0, set1, "time") {
+	Muuttujat, joissa ei ole ulottuvuutta "time" {
+		Ellei missään muuttujassa set0:ssa ole ulottuvuutta "time",
+		jokaiseen muuttujaan lisätään kyseinen ulottuvuus ja yhdistetään siten.
+		Muuten lisätään toisen niminen ulottuvuus.
+	}
+}
+
+concat(set0, set1, "-v:$@_$1") {
+	-v: liitetään erillisinä muuttujina
+	-v:args: args kuvaa, miten nimetään uudelleen {
+		$$: merkki '$'
+		$@: alkuperäinen muuttujan nimi
+		$n: n. ryhmä mahdollisesta säännöllisestä lausekkeesta, missä 0. on koko osuma.
+		Jos tiedoston "joo1234ei.nc" nimi haettiin säännöllisellä lauseella: R"(^joo\([0-9]\+\)ei\.nc$)",
+		muuttujan "hoo" nimeksi tulisi "hoo_1234"
+	}
+}*/
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars);
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
 nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
