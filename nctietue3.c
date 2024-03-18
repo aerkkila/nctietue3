@@ -851,44 +851,46 @@ next:;
     nct_return_error(NULL);
 }
 
-size_t nct_find_sorted_(const nct_var* var, double value, int right) {
+long nct_bsearch_(const nct_var* var, double value, int beforeafter) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
     if (var->endpos)
 	sem[1] = var->endpos - var->startpos - 1;
     while (1) {
-	if (sem[1]-sem[0] <= 1) {
-	    double v0 = getfun(var, sem[0]),
-		   v1 = getfun(var, sem[1]);
-	    nct_register = !(value==v0 || value==v1);
-	    return
-		value<v0  ? sem[0] :
-		value==v0 ? sem[0]+!!right :
-		value<v1  ? sem[1] :
-		value==v1 ? sem[1]+!!right :
-		sem[1]+1;
-	}
+	if (sem[1]-sem[0] <= 1)
+	    break;
 	double try = getfun(var, sem[2]);
 	sem[try>value] = sem[2]; // if (try>value) end = mid; else start = mid;
 	sem[2] = (sem[0]+sem[1]) / 2;
     }
+    double v0 = getfun(var, sem[0]),
+	   v1 = getfun(var, sem[1]);
+    nct_register = !(value==v0 || value==v1);
+    long ret =
+	value<v0  ? sem[0] :
+	value==v0 ? sem[0] + (beforeafter==1) :
+	value<v1  ? sem[1] :
+	value==v1 ? sem[1] + (beforeafter==1) :
+	sem[1] + 1;
+    ret -= beforeafter == -2;
+    ret -= beforeafter == -1 && nct_register;
+    return ret;
 }
 
-long nct_find_time(const nct_var* var, time_t time, int beforeafter) {
+long nct_find_sorted_(const nct_var* var, double value, int beforeafter) __attribute__((deprecated, alias("nct_bsearch_")));
+
+long nct_bsearch_time(const nct_var* var, time_t time, int beforeafter) {
     struct tm tm0;
     nct_anyd epoch = nct_timegm0(var, &tm0);
     long diff_s = time - epoch.a.t;
     double tofind = diff_s * 1000 / nct_get_interval_ms(epoch.d);
-    size_t res = nct_find_sorted(var, tofind, beforeafter==1);
-    res -= beforeafter == -2;
-    res -= beforeafter == -1 && nct_register;
-    return res;
+    return nct_bsearch(var, tofind, beforeafter);
 }
 
-long nct_find_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
+long nct_bsearch_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
     struct tm tm;
     nct__read_timestr(timestr, &tm);
-    return nct_find_time(dim, timegm(&tm), beforeafter);
+    return nct_bsearch_time(dim, timegm(&tm), beforeafter);
 }
 
 nct_var* nct_firstvar(const nct_set* set) {
@@ -1566,7 +1568,7 @@ long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     int smaller = time[1].a.t < time[0].a.t;
     long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
     long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_set_rstart(vars[smaller], diff_n);
+    nct_set_rstart(vars[smaller], nct_find_sorted(vars[smaller], diff_n));
     return diff_n;
 }
 
@@ -2155,7 +2157,7 @@ nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
 }
 
 nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter) {
-    size_t ind = nct_find_time_str(dim, timestr, beforeafter);
+    size_t ind = nct_bsearch_time_str(dim, timestr, beforeafter);
     return nct_set_length(dim, ind);
 }
 
@@ -2205,7 +2207,7 @@ nct_var* nct_set_start(nct_var* dim, size_t arg) {
 }
 
 nct_var* nct_set_timestart_str(nct_var *dim, const char *timestr, int beforeafter) {
-    size_t ind = nct_find_time_str(dim, timestr, beforeafter);
+    size_t ind = nct_bsearch_time_str(dim, timestr, beforeafter);
     return nct_set_rstart(dim, ind);
 }
 

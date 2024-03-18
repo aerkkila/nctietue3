@@ -320,23 +320,23 @@ void nct_finalize(); // calls nc_finalize to free memory used by netcdf
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 
-/* nct_find_sorted (without underscore) is meant to be used as the function,
-   right is an optional argument with default value zero.
-   If right, then returns n+1 if index n matches.
-   Sets nct_register to 0 (1) if the exact value was (wasn't) found.
-   Returns the index of the value. */
-size_t nct_find_sorted_(const nct_var* var, double value, int right);
-#define _nct_find_sorted(var, value, right, ...) nct_find_sorted_(var, value, right)
-#define nct_find_sorted(...) _nct_find_sorted(__VA_ARGS__, 0)
-
-/* beforeafter:
- *  -2: ret < find
- *  -1: ret ≤ find
- *   0:	ret ≥ find
- *   1: ret > find
+/* nct_bsearch (without underscore) is meant to be used as the function,
+ * beforeafter is an optional argument with default value zero:
+ *	 1: ret > find
+ *	 0: ret ≥ find
+ *	-1: ret ≤ find
+ *	-2: ret < find
+ * Sets nct_register to 0 (1) if the exact value was (wasn't) found.
  */
-long nct_find_time(const nct_var* timevar, time_t time, int beforeafter);
-long nct_find_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
+long nct_bsearch_(const nct_var* var, double value, int beforeafter);
+#define _nct_bsearch(var, value, right, ...) nct_bsearch_(var, value, right)
+#define nct_bsearch(...) _nct_bsearch(__VA_ARGS__, 0)
+/* for backwards compatibility */
+long nct_find_sorted_(const nct_var* var, double value, int beforeafter) __attribute__((deprecated));
+#define nct_find_sorted nct_bsearch
+
+long nct_bsearch_time(const nct_var* timevar, time_t time, int beforeafter);
+long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);
