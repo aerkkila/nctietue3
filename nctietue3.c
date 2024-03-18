@@ -9,6 +9,9 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#define Min(a, b) ((a) < (b) ? a : (b))
+#define Max(a, b) ((a) > (b) ? a : (b))
+
 nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 #define from_concatlist(var, num) (((nct_var**)(var)->rule[nct_r_concat].arg.v)[num])
 
@@ -832,7 +835,7 @@ long nct_bsearch_(const nct_var* var, double value, int beforeafter) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
     if (var->endpos)
-	sem[1] = var->endpos - var->startpos - 1;
+	sem[1] = Min(var->endpos - var->startpos - 1, var->len-1);
     while (1) {
 	if (sem[1]-sem[0] <= 1)
 	    break;
@@ -1561,8 +1564,8 @@ long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
 
     int smaller = time[1].a.t < time[0].a.t;
     long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
-    long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_shorten_length(vars[!smaller], nct_bsearch(vars[!smaller], vars[!smaller]->len - diff_n));
+    long diff_n = diff_ms  / ms_per_timeunit[time[!smaller].d];
+    nct_shorten_length(vars[!smaller], nct_bsearch(vars[!smaller], nct_get_floating_last(vars[!smaller], 1) - diff_n, 0) + 1);
     return diff_n;
 }
 
