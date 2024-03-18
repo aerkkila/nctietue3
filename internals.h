@@ -25,6 +25,35 @@ static nct_var* _nct_concat_var(nct_var* v0, nct_var* v1, int dimid0, int howman
     return v0;
 }
 
+static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
+    for(int a=0; a<src->natts; a++)
+	nct_copy_att(var, src->atts+a);
+
+    /* Let's explicitely copy those rules which we know how to deal with. */
+    int known_rules = nct_r_start | nct_r_stream | nct_r_concat;
+    if (anyrule(src, ~known_rules)) {
+	nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n",
+	    src->name, nct_get_filename(src->super));
+    }
+    nct_link_stream(var, src); // handles nct_r_stream
+    /* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
+    /* nct_r_start is handled in nct_link_data. */
+
+    if (link > 0)
+	nct_link_data(var, src);
+    else if (link < 0)
+	var->data = NULL;
+    else {
+	int len = var->len;
+	var->data = malloc(len*nctypelen(var->dtype));
+	memcpy(var->data, src->data, len*nctypelen(var->dtype));
+    }
+    var->startpos = src->startpos;
+    var->endpos = src->endpos;
+
+    return var;
+}
+
 /* Calling this alone does not free any memory. */
 static void _nct_drop_var(nct_var* var) {
     nct_set* super = var->super;
