@@ -1568,7 +1568,7 @@ long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     int smaller = time[1].a.t < time[0].a.t;
     long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
     long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_set_rstart(vars[smaller], nct_find_sorted(vars[smaller], diff_n));
+    nct_set_rstart(vars[smaller], nct_bsearch(vars[smaller], diff_n, -1));
     return diff_n;
 }
 
@@ -1585,7 +1585,7 @@ long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
     int smaller = time[1].a.t < time[0].a.t;
     long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
     long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_set_length(vars[!smaller], vars[!smaller]->len - diff_n);
+    nct_shorten_length(vars[!smaller], nct_bsearch(vars[!smaller], vars[!smaller]->len - diff_n));
     return diff_n;
 }
 

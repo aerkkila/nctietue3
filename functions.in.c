@@ -4,7 +4,7 @@
    No wrapper function is made if function name begins with underscore,
    or function returns ctype.
    */
-#include <nctietue3.h>
+#include "nctietue3.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -172,7 +172,7 @@ void* nct_get_interpolated_@nctype(const nct_var* var, int idim, const nct_var* 
 
 	for (int inewdim=0; inewdim<todimlen; inewdim++) {
 	    double targetcoord = nct_get_floating(todim, inewdim);
-	    int ihigher = nct_find_sorted(frdim, targetcoord, 1);
+	    int ihigher = nct_bsearch(frdim, targetcoord, 1);
 
 	    if (ihigher >= frdimlen) {
 		size_t offset = rep*oldcyclelen + (frdimlen-1)*naffected;
