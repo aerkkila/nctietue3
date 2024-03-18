@@ -35,19 +35,27 @@ void nct_verbose_line_ending(); // global but hidden: not in nctietue3.h
 #define __nctype__ @nctype
 
 @begin_stringalso
-void nct_print_datum_@nctype(const void* vdatum) {
+void nct_fprint_datum_@nctype(nct_fprint_t print, void *file, const void *vdatum) {
     @ctype datum = *(@ctype*)vdatum;
 #if __nctype__ == NC_FLOAT || __nctype__ == NC_DOUBLE
     if (datum > 0) {
 	if (datum < 1e-5 || datum >= 1e6) {
-	    printf("%e", datum);
+	    print(file, "%e", datum);
 	    return; }
     }
     else if (datum < 0 && (datum > -1e-5 || datum <= -1e6)) {
-	printf("%e", datum);
+	print(file, "%e", datum);
 	return; }
 #endif
-    printf("%@form", datum);
+    print(file, "%@form", datum);
+}
+
+void nct_fprint_datum_at_@nctype(nct_fprint_t print, void *file, const void* vdatum, long pos) {
+    nct_fprint_datum_@nctype(print, file, ((@ctype*)vdatum)+pos);
+}
+
+void nct_print_datum_@nctype(const void* vdatum) {
+    nct_fprint_datum_@nctype((nct_fprint_t)fprintf, stdout, vdatum);
 }
 
 void nct_print_datum_at_@nctype(const void* vdatum, long pos) {

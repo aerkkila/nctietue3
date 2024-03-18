@@ -16,6 +16,7 @@ typedef union  nct_any nct_any;
 typedef int (*nct_ncget_t)(int,int,void*);
 typedef int (*nct_ncget_partial_t)(int, int, const size_t*, const size_t*, void*);
 typedef int (*nct_ncget_1_t)(int, int, const size_t*, void*);
+typedef void (*nct_fprint_t)(void*, const char*, ...);
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 
@@ -492,6 +493,8 @@ void		nct_push_integer(nct_var*, long long);
 
 /* Print functions load the necessary data.
    Hence, nct_set* or nct_var* is not constant. */
+void nct_fprint_datum(nc_type, nct_fprint_t, void *file, const void *datum);
+void nct_fprint_datum_at(nc_type, nct_fprint_t, void *file, const void* vdatum, long pos);
 void nct_print_datum(nc_type, const void*);
 void nct_print_datum_at(nc_type, const void* vdatum, long pos);
 void nct_print_att(nct_att*, const char* indent);
