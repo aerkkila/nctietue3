@@ -1114,7 +1114,7 @@ void nct_get_varshape_list(const nct_var* var, ...) {
     va_list list;
     va_start(list, var);
     for (int i=0; i<var->ndims; i++) {
-	size_t* ptr = va_arg(list, size_t*);
+	long* ptr = va_arg(list, long*);
 	if (!ptr)
 	    continue;
 	*ptr = nct_get_vardim(var, i)->len;

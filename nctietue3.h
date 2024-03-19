@@ -365,7 +365,7 @@ nct_var*	nct_get_dim(const nct_set* set, const char* name);
 nct_var*	nct_get_var(const nct_set* set, const char* name);
 nct_var*	nct_get_vardim(const nct_var* var, int num);
 int		nct_get_vardimid(const nct_var* restrict var, int dimid);
-void		nct_get_varshape_list(const nct_var* var, ...); // size_t *lendim0, size_t *lendim1, ...
+void		nct_get_varshape_list(const nct_var* var, ...); // long *lendim0, long *lendim1, ...
 int		nct_get_varid(const nct_set* restrict, const char* restrict);
 int		nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t		nct_get_len_from(const nct_var*, int startdim);
