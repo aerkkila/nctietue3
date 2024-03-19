@@ -636,7 +636,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 		dimids[i] = nct_dimid(dim);
 	    }
 	    nct_var *dstdim = dest->dims[dimids[i]];
-	    if (nct_iscoord(srcdim) || !nct_iscoord(dstdim))
+	    if (nct_iscoord(srcdim) && !nct_iscoord(dstdim))
 		_nct_copy_var_internal(nct_dim2coord(dstdim, NULL, srcdim->dtype), srcdim, 0);
 	}
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
