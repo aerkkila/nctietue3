@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-//#include <nctplot.h>
+#include <geodesic.h>
 
 #define MIN(a,b) ((a) < (b) ? a : (b))
 
@@ -19,7 +19,7 @@ typedef struct {
 
 static int iround(double a) {
     int i = a;
-    i += ((a-i) >= 0.5) - ((a-i) <= -0.5);
+    i += (a-i >= 0.5) - (a-i <= -0.5);
     return i;
 }
 
@@ -141,25 +141,6 @@ static int* mkconversion(const nct_var* var, const char* from, const char* to, n
 	}
     }
     proj_destroy(pj);
-
-    /*
-    int* apu = malloc(new_xylen*sizeof(int));
-    for(int i=0; i<new_xylen; i++)
-	apu[i] = whence[i] / xlen_old;
-    nct_set* set = nct_create_simple(apu, NC_INT, args->new_ylen, args->new_xlen);
-    nctplot(set);
-    nct_free1(set);
-    apu = malloc(new_xylen*sizeof(int));
-    for(int i=0; i<new_xylen; i++)
-	apu[i] = whence[i] % xlen_old;
-    set = nct_create_simple(apu, NC_INT, args->new_ylen, args->new_xlen);
-    nctplot(set);
-    nct_free1(set);
-    set = nct_create_simple(whence, NC_INT, args->new_ylen, args->new_xlen);
-    nctplot(set);
-    nct_firstvar(set)->not_freeable = 1;
-    nct_free1(set);
-    */
 
 out:
     proj_context_destroy(ctx);
@@ -308,6 +289,42 @@ nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const 
 	newvar->filedimensions[i] = nct_get_vardim(newvar, i)->len;
 
     return newvar;
+}
+
+double* nctproj__get_areas_lat_regular(double lat0_lower, double latdiff, long len, double londiff, double *areas, double geod_a, double geod_rf) {
+    if (!areas) {
+	nct_puterror("malloc %zu failed", len * sizeof(double));
+	nct_return_error(NULL);
+    }
+    double area1, area2;
+    struct geod_geodesic geod;
+    if (geod_a <= 0) { // WGS84 by default
+	geod_a = 6378137;
+	geod_rf = 298.257222101;
+    }
+    geod_init(&geod, geod_a, 1/geod_rf);
+    double lat0 = lat0_lower;
+    for (long j=0; j<len; j++) {
+	double lat1 = lat0_lower + (j+1)*latdiff;
+	geod_geninverse(&geod,
+	    lat0, 0, lat0, londiff,
+	    NULL, NULL, NULL, NULL, NULL, NULL, &area1);
+	geod_geninverse(&geod,
+	    lat1, 0, lat1, londiff,
+	    NULL, NULL, NULL, NULL, NULL, NULL, &area2);
+	areas[j] = area2 - area1;
+	lat0 = lat1;
+    }
+    return areas;
+}
+
+double* __attribute__((malloc)) nctproj_get_areas_lat_regular(const nct_var *latvar, const nct_var *lonvar, double geod_a, double geod_rf) {
+    double lat0 = nct_get_floating(latvar, 0);
+    double latdiff = nct_get_floating(latvar, 1) - lat0;
+    double londiff = lonvar ? nct_get_floating(lonvar, 1) - nct_get_floating(lonvar, 0) : 1.0;
+    lat0 -= latdiff * 0.5;
+    double *areas = malloc(latvar->len * sizeof(double));
+    return nctproj__get_areas_lat_regular(lat0, latdiff, latvar->len, londiff, areas, geod_a, geod_rf);
 }
 
 #undef MIN

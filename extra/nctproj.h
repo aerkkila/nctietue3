@@ -19,3 +19,10 @@ FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* t
    Use of nct_load with this variable is undefined.
    The stream will be closed when nct_free_var is called. */
 nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
+
+/* If geod_a <= 0, WGS84 is used as the ellipsoid.
+   If lon is NULL, 1° is used as londiff. */
+double* nctproj_get_areas_lat_regular(const nct_var* lat, const nct_var *lon, double geod_a, double geod_rf)
+    __attribute__((malloc));
+
+double* nctproj__get_areas_lat_regular(double lat0_lower, double latdiff, long n, double londiff, double *out, double geod_a, double geod_rf);
