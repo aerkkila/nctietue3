@@ -2232,10 +2232,10 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
     ncfunk(nc_create, name, NC_NETCDF4|NC_CLOBBER, &ncid);
     ncfunk(nc_set_fill, ncid, NC_NOFILL, NULL);
     int n = src->ndims;
-    for(int i=0; i<n; i++)
+    for (int i=0; i<n; i++)
 	ncfunk(nc_def_dim, ncid, src->dims[i]->name, src->dims[i]->len, &id);
     n = src->nvars;
-    for(int i=0; i<n; i++) {
+    for (int i=0; i<n; i++) {
 	nct_var* v = src->vars[i];
 	if (what & _createcoords && !nct_iscoord(v))
 	    continue;
@@ -2243,13 +2243,13 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 	if (!v->data) {
 	    if (nct_loadable(v))
 		load = 1;
-	    else
+	    else if (!(what & _defonly))
 		continue;
 	}
 	ncfunk(nc_def_var, ncid, v->name, v->dtype, v->ndims, v->dimids, &id);
 	if (what & _mutable)
 	    v->ncid = id;
-	for(int a=0; a<v->natts; a++)
+	for (int a=0; a<v->natts; a++)
 	    if (v->atts[a].dtype == NC_CHAR)
 		ncfunk(nc_put_att_text, ncid, i, v->atts[a].name,
 			v->atts[a].len, v->atts[a].value);
