@@ -365,6 +365,12 @@ nct_var* nct_meannan_first_@nctype(nct_var* var) {
 #endif
 }
 
+void nct__memcpy_double_as_@nctype(void *vdst, const double *src, long n) {
+    @ctype *dst = vdst;
+    for (long i=0; i<n; i++)
+	dst[i] = src[i];
+}
+
 #undef ctype
 #undef form
 #undef __nctype__

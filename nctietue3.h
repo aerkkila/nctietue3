@@ -749,7 +749,7 @@ void*     nct_minmax_at(const nct_var*, long start, long end, void* vresult);
 void*     nct_minmax_nan_at(const nct_var*, long nanval, long start, long end, void* vresult);
 nct_var*  nct_mean_first(nct_var*);
 nct_var*  nct_meannan_first(nct_var*);
-
+void	  nct__memcpy_double_as(nc_type nctype, void* dst, const double* src, long n);
 
 /* These functions work independently from this library (except using the error handling) but are needed in some functions. */
 
