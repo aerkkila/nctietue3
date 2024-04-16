@@ -37,7 +37,7 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
     }
     nct_link_stream(var, src); // handles nct_r_stream
     /* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
-    /* nct_r_start is handled in nct_link_data. */
+    var->rule[nct_r_start].arg.lli = src->rule[nct_r_start].arg.lli; // nct_r_start
 
     if (link > 0)
 	nct_link_data(var, src);
