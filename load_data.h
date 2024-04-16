@@ -162,7 +162,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
     }
 
 error: __attribute__((cold));
-    nct_puterror("Didn't find starting location (%li) from %s\n", start, nct_get_filename(var->super));
+    nct_puterror("Didn't find starting location (%li) from %s\n", start, nct_get_filename_var(var));
     nct_return_error(1);
 }
 
@@ -217,7 +217,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
     move[var->ndims-1] = startpos;
     size_t result;
     if ((result = make_coordinates(move, info->fcount, var->nfiledims)))
-	nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, nct_get_filename(var->super), var->name);
+	nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, nct_get_filename_var(var), var->name);
     for (int i=var->nfiledims-1; i>=0; i--) {
 	if (move[i]) {
 	    info->fstart[i] += move[i];
@@ -242,7 +242,7 @@ static void print_progress(const nct_var* var, const loadinfo_t* info, size_t le
     printf("}; count={%li", info->fcount[0]);
     for(int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fcount[i]);
-    printf("}; from %i: %s (%s)", info->ifile, nct_get_filename(var->super), var->name);
+    printf("}; from %i: %s (%s)", info->ifile, nct_get_filename_var(var), var->name);
     nct_verbose_line_ending();
 }
 
@@ -306,7 +306,7 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
     size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
     if ((var->dtype == NC_CHAR) + (dtype == NC_CHAR) + 2*(dtype == NC_NAT) == 1) {
 	nct_puterror("Cannot convert to or from NC_CHAR. Variable %s%s%s in %s%s%s\n",
-		nct_varname_color, var->name, nct_default_color, nct_varset_color, nct_get_filename(var->super), nct_default_color);
+		nct_varname_color, var->name, nct_default_color, nct_varset_color, nct_get_filename_var(var), nct_default_color);
 	nct_return_error(NULL);
     }
     if (dtype != NC_NAT) {
