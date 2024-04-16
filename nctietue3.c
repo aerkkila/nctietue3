@@ -501,8 +501,8 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		    nct_rename(var1, name, 1);
 		}
 		nct_var* var = nct_copy_var(vs0, var1, 1);
-		var->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
-		// var->ncid = -1; // cannot be loaded since var->super->ncid has been changed
+		if (!var->fileinfo)
+		    var->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
 		nct_ensure_unique_name(var);
 	    }
 	    /* The first set should also be renamed similarily but only once. */
