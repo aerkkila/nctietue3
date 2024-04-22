@@ -300,8 +300,11 @@ void nct_allocate_varmem(nct_var* var) {
 	return;
     if cannot_free(var)
 	var->data = malloc(var->len*nctypelen(var->dtype));
-    else
-	var->data = realloc(var->data, var->len*nctypelen(var->dtype));
+    else {
+	if (var->data)
+	    free(var->data);
+	var->data = malloc(var->len*nctypelen(var->dtype));
+    }
     var->capacity = var->len;
     if (var->data)
 	return;
