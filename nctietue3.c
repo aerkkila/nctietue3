@@ -1550,6 +1550,17 @@ nct_anyd nct_timegm0_nofail(const nct_var* var, struct tm* tm) {
     return result;
 }
 
+short* __attribute__((malloc)) nct_time_to_year(const nct_var *timevar) {
+    nct_anyd epoch = nct_timegm0(timevar, NULL);
+    struct tm tm;
+    short *years = malloc(timevar->len * sizeof(short));
+    for (int i=0; i<timevar->len; i++) {
+	nct_timegm(timevar, &tm, &epoch, i);
+	years[i] = tm.tm_year + 1900;
+    }
+    return years;
+}
+
 long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     nct_var* vars[] = {timevar0, timevar1};
     nct_anyd time[2];

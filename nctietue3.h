@@ -436,6 +436,8 @@ long nct_match_endtime(nct_var*, nct_var*);
 nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
 nct_anyd nct_timegm(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
 
+short* nct_time_to_year(const nct_var *var) __attribute__((malloc));
+
 /*
  * See also nct_gmtime, nct_timegm, nct_localtime, nct_mktime, nct_mktime0
  * Arguments:
