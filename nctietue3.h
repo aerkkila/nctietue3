@@ -300,6 +300,8 @@ nct_set* _nct_create_simple_gd(nct_set* s, void* dt, int dtype, ...);
 nct_var* nct_dim2coord(nct_var*, void*, nc_type);
 nct_var* nct_coord2dim(nct_var* var); // The variable is removed and the dimension kept.
 
+double* nct_coordbounds_from_central(const nct_var *coord, double *out); // length(out) = coord->len+1
+
 /* Nothing is calculated nor data moved.
    The dimension is just simply dropped.
    This is used after doing something else,

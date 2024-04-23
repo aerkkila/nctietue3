@@ -1387,6 +1387,23 @@ const char* nct_get_filename_var_capture(const nct_var* var, int igroup, int *ca
     return info->name + info->dirnamelen + match->rm_so;
 }
 
+double* nct_coordbounds_from_central(const nct_var *crdsrc, double *data) {
+    long crdlensrc = crdsrc->len;
+    double last = nct_get_floating(crdsrc, 0);
+    double this = nct_get_floating(crdsrc, 1);
+    data[0] = last - (this - last)/2;
+    int ind = 1;
+    while (1) {
+	data[ind] = this - (this - last)/2;
+	last = this;
+	if (ind == crdlensrc-1) {
+	    data[ind+1] = 2*data[ind] - data[ind-1];
+	    return data;
+	}
+	this = (nct_get_floating(crdsrc, ++ind));
+    }
+}
+
 nct_var* nct_load_stream(nct_var* var, size_t len) {
     int len0 = var->len;
     var->len = len;
