@@ -292,10 +292,6 @@ nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const 
 }
 
 double* nctproj__get_areas_lat_regular(double lat0_lower, double latdiff, long len, double londiff, double *areas, double geod_a, double geod_rf) {
-    if (!areas) {
-	nct_puterror("malloc %zu failed", len * sizeof(double));
-	nct_return_error(NULL);
-    }
     double area1, area2;
     struct geod_geodesic geod;
     if (geod_a <= 0) { // WGS84 by default
@@ -318,13 +314,53 @@ double* nctproj__get_areas_lat_regular(double lat0_lower, double latdiff, long l
     return areas;
 }
 
-double* __attribute__((malloc)) nctproj_get_areas_lat_regular(const nct_var *latvar, const nct_var *lonvar, double geod_a, double geod_rf) {
+double* __attribute__((malloc)) nctproj_get_areas_lat_regular(const nct_var *latvar, double lonstep, double geod_a, double geod_rf) {
     double lat0 = nct_get_floating(latvar, 0);
     double latdiff = nct_get_floating(latvar, 1) - lat0;
-    double londiff = lonvar ? nct_get_floating(lonvar, 1) - nct_get_floating(lonvar, 0) : 1.0;
     lat0 -= latdiff * 0.5;
     double *areas = malloc(latvar->len * sizeof(double));
-    return nctproj__get_areas_lat_regular(lat0, latdiff, latvar->len, londiff, areas, geod_a, geod_rf);
+    if (!areas) {
+	nct_puterror("malloc %zu failed", latvar->len * sizeof(double));
+	nct_return_error(NULL);
+    }
+    return nctproj__get_areas_lat_regular(lat0, latdiff, latvar->len, lonstep, areas, geod_a, geod_rf);
+}
+
+double *nctproj__get_areas_lat(double *bounds, long len, double lonstep, double *areas, double geod_a, double geod_rf) {
+    double area1, area2;
+    struct geod_geodesic geod;
+    if (geod_a <= 0) { // WGS84 by default
+	geod_a = 6378137;
+	geod_rf = 298.257222101;
+    }
+    geod_init(&geod, geod_a, 1/geod_rf);
+    for (long j=0; j<len; j++) {
+	geod_geninverse(&geod,
+	    bounds[j], 0, bounds[j], lonstep,
+	    NULL, NULL, NULL, NULL, NULL, NULL, &area1);
+	geod_geninverse(&geod,
+	    bounds[j+1], 0, bounds[j+1], lonstep,
+	    NULL, NULL, NULL, NULL, NULL, NULL, &area2);
+	areas[j] = area2 - area1;
+    }
+    return areas;
+}
+
+double* nctproj_get_areas_lat_gd(double *out, const nct_var *latvar, double lonstep, double geod_a, double geod_rf) {
+    double *bounds = malloc((latvar->len+1) * sizeof(double));
+    nct_coordbounds_from_central(latvar, bounds);
+    nctproj__get_areas_lat(bounds, latvar->len, lonstep, out, geod_a, geod_rf);
+    free(bounds);
+    return out;
+}
+
+double* __attribute__((malloc)) nctproj_get_areas_lat(const nct_var *latvar, double lonstep, double geod_a, double geod_rf) {
+    double *areas = malloc(latvar->len * sizeof(double));
+    if (!areas) {
+	nct_puterror("malloc %zu failed", latvar->len * sizeof(double));
+	nct_return_error(NULL);
+    }
+    return nctproj_get_areas_lat_gd(areas, latvar, lonstep, geod_a, geod_rf);
 }
 
 #undef MIN

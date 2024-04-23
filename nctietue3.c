@@ -736,6 +736,14 @@ nct_var* nct_coord2dim(nct_var* var) {
     return var;
 }
 
+double nct_diff_at_floating(nct_var* var, long ind) {
+    return nct_get_floating(var, ind+1) - nct_get_floating(var, ind);
+}
+
+long long nct_diff_at_integer(nct_var* var, long ind) {
+    return nct_get_integer(var, ind+1) - nct_get_integer(var, ind);
+}
+
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
     size_t new_len = var->len / var->super->dims[var->dimids[dim]]->len;
     if (shrink && !cannot_free(var)) {

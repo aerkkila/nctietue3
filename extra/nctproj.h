@@ -20,9 +20,14 @@ FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* t
    The stream will be closed when nct_free_var is called. */
 nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
 
-/* If geod_a <= 0, WGS84 is used as the ellipsoid.
-   If lon is NULL, 1° is used as londiff. */
-double* nctproj_get_areas_lat_regular(const nct_var* lat, const nct_var *lon, double geod_a, double geod_rf)
+/* If geod_a <= 0, WGS84 is used as the ellipsoid. */
+double* nctproj_get_areas_lat_regular(const nct_var* lat, double lonstep, double geod_a, double geod_rf)
     __attribute__((malloc));
 
-double* nctproj__get_areas_lat_regular(double lat0_lower, double latdiff, long n, double londiff, double *out, double geod_a, double geod_rf);
+double* nctproj__get_areas_lat_regular(double lat0_lower, double latstep, long n, double lonstep, double *out, double geod_a, double geod_rf);
+
+/* If geod_a <= 0, WGS84 is used as the ellipsoid. */
+double* nctproj_get_areas_lat(const nct_var *latvar, double lonstep, double geod_a, double geod_rf)
+    __attribute__((malloc));
+double* nctproj_get_areas_lat_gd(double *out, const nct_var *latvar, double lonstep, double geod_a, double geod_rf);
+double* nctproj__get_areas_lat(double *bounds, long len, double lonstep, double *areas, double geod_a, double geod_rf);

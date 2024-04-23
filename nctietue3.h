@@ -302,6 +302,9 @@ nct_var* nct_coord2dim(nct_var* var); // The variable is removed and the dimensi
 
 double* nct_coordbounds_from_central(const nct_var *coord, double *out); // length(out) = coord->len+1
 
+double nct_diff_at_floating(nct_var* var, long ind);
+long long nct_diff_at_integer(nct_var* var, long ind);
+
 /* Nothing is calculated nor data moved.
    The dimension is just simply dropped.
    This is used after doing something else,
