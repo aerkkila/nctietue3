@@ -609,46 +609,33 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
 
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     nct_var* var;
-    if (nct_iscoord(src)) {
-	int dimid = nct_get_dimid(dest, src->name);
-	if (dimid < 0) {
-	    var = nct_add_dim(dest, src->len, strdup(src->name));
-	    var->freeable_name = 1;
+    int n = src->ndims;
+    int dimids[n];
+    nct_var *dstdim;
+    for(int i=0; i<n; i++) {
+	nct_var* srcdim = src->super->dims[src->dimids[i]];
+	dimids[i] = nct_get_dimid(dest, srcdim->name);
+	/* Create the dimension if not present in dest. */
+	/* Create a new dimension if lengths mismatch in source and destination. */
+	if (dimids[i] < 0 || dest->dims[dimids[i]]->len != srcdim->len) {
+	    nct_var* dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
+	    dim->freeable_name = 1;
+	    nct_ensure_unique_name(dim);
+	    dimids[i] = nct_dimid(dim);
 	}
-	else
-	    var = dest->dims[dimid];
-	var = nct_dim2coord(var, NULL, src->dtype);
+	dstdim = dest->dims[dimids[i]];
+	if (nct_iscoord(srcdim) && !nct_iscoord(dstdim))
+	    _nct_copy_var_internal(nct_dim2coord(dstdim, NULL, srcdim->dtype), srcdim, 0);
     }
-    else {
-	int n = src->ndims;
-	int dimids[n];
-	for(int i=0; i<n; i++) {
-	    nct_var* srcdim = src->super->dims[src->dimids[i]];
-	    dimids[i] = nct_get_dimid(dest, srcdim->name);
-	    /* Create the dimension if not present in dest. */
-	    if (dimids[i] < 0) {
-		nct_var* dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
-		dim->freeable_name = 1;
-		dimids[i] = nct_dimid(dim);
-	    }
-	    /* Create a new dimension if lengths mismatch in source and destination. */
-	    else if (dest->dims[dimids[i]]->len != srcdim->len) {
-		nct_var* dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
-		dim->freeable_name = 1;
-		nct_ensure_unique_name(dim);
-		dimids[i] = nct_dimid(dim);
-	    }
-	    nct_var *dstdim = dest->dims[dimids[i]];
-	    if (nct_iscoord(srcdim) && !nct_iscoord(dstdim))
-		_nct_copy_var_internal(nct_dim2coord(dstdim, NULL, srcdim->dtype), srcdim, 0);
-	}
+    if (!nct_iscoord(src))
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
-	var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
-	var->ncid = src->ncid;
-	var->nfiledims = src->nfiledims;
-	memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
-	var->freeable_name = 1;
-    }
+    else
+	var = dstdim;
+    var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
+    var->ncid = src->ncid;
+    var->nfiledims = src->nfiledims;
+    memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
+    var->freeable_name = 1;
     return _nct_copy_var_internal(var, src, link);
 }
 
