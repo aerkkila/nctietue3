@@ -98,6 +98,7 @@ extern int nct_backtrace_line;
 /* bits to use in freeable or owner flags, e.g. (nct_att(a)).freeable = nct_ref_content */
 #define nct_ref_content	(1<<0)
 #define nct_ref_name	(1<<1)
+#define nct_ref_string	(1<<2) // whether the strings are freeable when datatype is NC_STRING
 
 /* Some functions use nct_register to return an extra integer besides the return value. */
 extern int nct_ncret, nct_register;

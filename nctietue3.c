@@ -603,7 +603,13 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
 	.len	= src->len,
 	.freeable = nct_ref_content | nct_ref_name,
     };
-    memcpy(att.value, src->value, len);
+    if (att.dtype == NC_STRING) {
+	for (int i=0; i<att.len; i++)
+	    ((char**)att.value)[i] = strdup(((char**)src->value)[i]);
+	att.freeable |= nct_ref_string;
+    }
+    else
+	memcpy(att.value, src->value, len);
     return nct_add_varatt(var, &att);
 }
 
@@ -612,7 +618,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     int n = src->ndims;
     int dimids[n];
     nct_var *dstdim;
-    for(int i=0; i<n; i++) {
+    for (int i=0; i<n; i++) {
 	nct_var* srcdim = src->super->dims[src->dimids[i]];
 	dimids[i] = nct_get_dimid(dest, srcdim->name);
 	/* Create the dimension if not present in dest. */
@@ -624,8 +630,12 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	    dimids[i] = nct_dimid(dim);
 	}
 	dstdim = dest->dims[dimids[i]];
-	if (nct_iscoord(srcdim) && !nct_iscoord(dstdim))
-	    _nct_copy_var_internal(nct_dim2coord(dstdim, NULL, srcdim->dtype), srcdim, 0);
+	if (nct_iscoord(srcdim) && !nct_iscoord(dstdim)) {
+	    dstdim = nct_dim2coord(dstdim, NULL, srcdim->dtype);
+	    if (srcdim != src)
+		_nct_copy_var_internal(dstdim, srcdim, 0);
+	    // else copied at the last line of this function
+	}
     }
     if (!nct_iscoord(src))
 	var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
@@ -904,11 +914,11 @@ nct_var* nct_lastvar(const nct_set* set) {
 }
 
 static void _nct_free_att(nct_att* att) {
-    if(att->dtype == NC_STRING)
+    if (att->dtype == NC_STRING && att->freeable & nct_ref_string)
 	nc_free_string(att->len, att->value);
-    if(att->freeable & nct_ref_content)
+    if (att->freeable & nct_ref_content)
 	free(att->value);
-    if(att->freeable & nct_ref_name)
+    if (att->freeable & nct_ref_name)
 	free(att->name);
     att->freeable = 0;
 }
@@ -963,8 +973,8 @@ static void _nct_free_var(nct_var* var) {
     for(int i=0; i<var->natts; i++)
 	_nct_free_att(var->atts+i);
     free(var->atts);
-    if (var->dtype == NC_STRING)
-	for(int i=0; i<var->len; i++)
+    if (var->dtype == NC_STRING && !(var->not_freeable & nct_ref_string))
+	for (int i=0; i<var->len; i++)
 	    free(((char**)var->data)[i]);
     nct_unlink_data(var);
     nct_unlink_stream(var);
