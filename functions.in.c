@@ -4,6 +4,7 @@
    No wrapper function is made if function name begins with underscore,
    or function returns ctype.
    */
+#define NCT_NO_VERSION_CHECK
 #include "nctietue3.h"
 #include <string.h>
 #include <stdlib.h>

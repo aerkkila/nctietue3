@@ -2,9 +2,9 @@
 #define __NCTIETUE__
 
 #include <netcdf.h>
+#include <stdlib.h>
 #include <time.h>	// time_t
 #include <stdio.h>	// stderr
-#include <stddef.h>	// NULL
 #include <regex.h>	// regmatch_t
 #include <stdint.h>	// intptr_t
 
@@ -17,6 +17,13 @@ typedef int (*nct_ncget_t)(int,int,void*);
 typedef int (*nct_ncget_partial_t)(int, int, const size_t*, const size_t*, void*);
 typedef int (*nct_ncget_1_t)(int, int, const size_t*, void*);
 typedef void (*nct_fprint_t)(void*, const char*, ...);
+
+/* To be incremented when this library is changed in a way
+   that requires programs to be recompiled, for example when structs are modified.
+   Function nct_check_version checks before entering the main function that the two numbers match,
+   that is the program was compiled with the same version than the library. */
+#define __nct_version_in_executable 0
+extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
 
@@ -106,6 +113,17 @@ extern const char* nct_error_color;
 extern const char* nct_default_color;
 extern const char* nct_backtrace_color;
 extern const short nct_typelen[];
+
+#ifndef NCT_NO_VERSION_CHECK
+static void __attribute__((constructor)) nct_check_version() {
+    if (__nct_version_in_executable != __nct_version_in_library)
+	goto fail;
+    return;
+fail: __attribute__((cold));
+    nct_puterror("The program has to be recompiled.\n");
+    exit(50);
+}
+#endif
 
 /* What happens on error besides writing an error message.
  * auto (default):

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#define NCT_NO_VERSION_CHECK
 #include "nctietue3.h"
 #include <netcdf_mem.h> // must be after netcdf.h from nctietue3.h
 /* for multifile read using regex */
@@ -108,6 +109,8 @@ static void	_nct_free_att(nct_att*);
 static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* filename, int flags);
 static nct_set* nct_read_ncf_lazy(const void* filename, int flags);
 static nct_set* nct_after_lazyread(nct_set* s, int flags);
+
+const int __nct_version_in_library = __nct_version_in_executable;
 
 void* nct_getfun[] = {
     [NC_NAT]    = nc_get_var,
