@@ -767,6 +767,8 @@ nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
     int* ptr = var->dimids;
     int new_ndims = --var->ndims;
     memmove(ptr+dim, ptr+dim+1, new_ndims*sizeof(int)-dim);
+    if (var->endpos > var->len)
+	var->endpos = var->len;
     return var;
 }
 
@@ -1292,7 +1294,8 @@ static int nct_open_mem(struct nct_fileinfo_mem_t*);
 
 /* No need to call outside perhaps_close_the_file */
 static void perhaps_free_the_content(struct nct_fileinfo_mem_t* info) {
-    if (!(nct_readflags & (nct_rkeepmem|nct_rkeep)) && info->owner & nct_ref_content)
+    unsigned flags = info->fileinfo.nct_readflags;
+    if (!(flags & (nct_rkeepmem|nct_rkeep)) && info->owner & nct_ref_content)
 	info->content = (free(info->content), NULL);
 }
 
@@ -1305,7 +1308,8 @@ static void perhaps_close_the_file(nct_var* var) {
 	    perhaps_free_the_content((void*)var->fileinfo);
     }
     else {
-	ncidp = nct_readflags & nct_rkeep ? NULL : &var->super->ncid;
+	unsigned flags = ((struct nct_fileinfo_t*)var->super->fileinfo)->nct_readflags;
+	ncidp = flags & nct_rkeep ? NULL : &var->super->ncid;
 	if (hasrule(var->super, nct_r_mem))
 	    perhaps_free_the_content(var->super->fileinfo);
     }
@@ -1315,7 +1319,7 @@ static void perhaps_close_the_file(nct_var* var) {
 
 static void perhaps_close_the_file_set(nct_set* set) {
     int *ncidp;
-    ncidp = nct_readflags & nct_rkeep ? NULL : &set->ncid;
+    ncidp = ((struct nct_fileinfo_t*)set->fileinfo)->nct_readflags & nct_rkeep ? NULL : &set->ncid;
     if (hasrule(set, nct_r_mem))
 	perhaps_free_the_content(set->fileinfo);
     if (ncidp && *ncidp > 0)
@@ -1740,22 +1744,23 @@ void nct_print_meta(nct_set* set) {
 }
 
 static nct_set* nct_after_lazyread(nct_set* s, int flags) {
-    unsigned old = nct_readflags;
+    unsigned *flagsp = &((struct nct_fileinfo_t*)s->fileinfo)->nct_readflags;
+    const unsigned oldflags = *flagsp;
     if (flags & nct_rlazy)
 	goto end;
-    nct_readflags = flags | nct_rkeep; // don't close and reopen on each variable
-    if (flags & nct_rcoord) {
+    *flagsp |= nct_rkeep; // don't close and reopen on each variable
+    if (*flagsp & nct_rcoord) {
 	int ndims = s->ndims;
-	for(int i=0; i<ndims; i++)
+	for (int i=0; i<ndims; i++)
 	    if (nct_iscoord(s->dims[i]))
 		nct_load(s->dims[i]);
 	goto end;
     }
-    for(int i=s->nvars-1; i>=0; i--)
+    for (int i=s->nvars-1; i>=0; i--)
 	nct_load(s->vars[i]);
 
 end:
-    nct_readflags = old;
+    *flagsp = oldflags;
     perhaps_close_the_file_set(s);
     return s;
 }
@@ -1849,6 +1854,7 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
     else // If another filetype isn't recognized, calls this function again with flags|nct_rnetcdf.
 	return _read_unknown_format(dest, vfile, flags);
     fileinfo->fileinfo.nusers = 1;
+    fileinfo->fileinfo.nct_readflags = flags;
     ncfunk(nc_inq_ndims, ncid, &ndims);
     ncfunk(nc_inq_nvars, ncid, &nvars);
     *dest = (nct_set){

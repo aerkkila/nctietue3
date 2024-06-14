@@ -22,7 +22,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-#define __nct_version_in_executable 0
+static const int __nct_version_in_executable = 0;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -163,6 +163,7 @@ struct nct_fileinfo_t {
     int dirnamelen;
     regmatch_t *groups;
     int ncid, ismem_t, nusers; // ncid is only used if variable has a separate fileinfo
+    unsigned nct_readflags;
 };
 
 /* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
@@ -208,7 +209,7 @@ struct nct_var {
     int		natts, attcapacity;
     nct_att*	atts;
     size_t	len, capacity;
-    long	startpos, endpos; // if loaded partially, from which to which index
+    long	startpos, endpos; // if virtual file is loaded partially, from which to which index
     long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
     nc_type	dtype;
     int		not_freeable;
@@ -572,7 +573,6 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  *	Read attributes.
  *
  * nct_rkeep:
- *	FIXME: Works properly only if added to global nct_readflags.
  *	Read files are kept open. This can lead to Netcdf error: too many open files,
  *	but avoids reopening them on nct_load if nct_rlazy or nct_rcoord is used.
  *	nct_free or nct_close_nc will close the file
@@ -586,7 +586,6 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  *	The filename argument is the name of the file to be read.
  *
  * nct_rkeepmem:
- *	FIXME: Works properly only if added to global nct_readflags.
  * 	Meaningful only with nct_rmem.
  * 	Read memfiles are kept in memory. See also nct_fileinfo_mem_t.owner.
  * default:
