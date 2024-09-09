@@ -450,6 +450,11 @@ nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_l
 struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
+/* Calls nct_set_rstart(nct_set_length) making both dimensions to start(end) as close to each other as possible.
+   Returns the number of steps removed. */
+long nct_match_start(nct_var *dim0, nct_var *dim1);
+long nct_match_end(nct_var *dim0, nct_var *dim1);
+
 /* Calls nct_set_rstart making both timevariables to start at the same time.
    Returns the number of timesteps removed or negative on error. */
 long nct_match_starttime(nct_var*, nct_var*);

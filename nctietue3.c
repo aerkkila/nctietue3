@@ -1590,6 +1590,43 @@ short* __attribute__((malloc)) nct_time_to_year(const nct_var *timevar) {
     return years;
 }
 
+long nct_match_start(nct_var *dim0, nct_var *dim1) {
+    nct_var *dim[] = {dim0, dim1};
+    double start[] = {
+	nct_get_floating(dim[0], 0),
+	nct_get_floating(dim[1], 0),
+    };
+    int ichange = start[1] < start[0];
+    long ind = nct_bsearch(dim[ichange], start[!ichange], -1);
+    if (ind < 0)
+	return 0;
+    double diff0 = start[!ichange] - nct_get_floating(dim[ichange], ind);
+    double diff1 = nct_get_floating(dim[ichange], ind+1) - start[!ichange];
+    if (diff1 < diff0)
+	ind++;
+    nct_set_rstart(dim[ichange], ind);
+    return ind;
+}
+
+long nct_match_end(nct_var *dim0, nct_var *dim1) {
+    nct_var *dim[] = {dim0, dim1};
+    double end[] = {
+	nct_get_floating_last(dim[0], 1),
+	nct_get_floating_last(dim[1], 1),
+    };
+    int ichange = end[1] > end[0];
+    long ind = nct_bsearch(dim[ichange], end[!ichange], -1);
+    if (ind >= dim[ichange]->len-1)
+	return 0;
+    double diff0 = end[!ichange] - nct_get_floating(dim[ichange], ind);
+    double diff1 = nct_get_floating(dim[ichange], ind+1) - end[!ichange];
+    if (diff1 < diff0)
+	ind++;
+    long oldlen = dim[ichange]->len;
+    nct_set_length(dim[ichange], ind+1);
+    return oldlen - ind;
+}
+
 long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
     nct_var* vars[] = {timevar0, timevar1};
     nct_anyd time[2];
