@@ -45,11 +45,11 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 	var->data = NULL;
     else {
 	long start = var->rule[nct_r_start].arg.lli,
-	     len1 = nct_typelen[var->dtype];
+	     size1 = nct_typelen[var->dtype];
 	int len = var->len + start;
-	var->data = malloc(len*nctypelen(var->dtype));
-	memcpy(var->data, (char*)src->data-start*len1, len*len1);
-	var->data = (char*)var->data + start*len1;
+	var->data = malloc(len*size1);
+	memcpy(var->data, (char*)src->data-start*size1, len*size1);
+	var->data = (char*)var->data + start*size1;
     }
     var->startpos = src->startpos;
     var->endpos = src->endpos;
