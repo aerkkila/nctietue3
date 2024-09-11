@@ -43,7 +43,7 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 	nct_link_data(var, src);
     else if (link < 0)
 	var->data = NULL;
-    else {
+    else if (src->data) {
 	long start = var->rule[nct_r_start].arg.lli,
 	     size1 = nct_typelen[var->dtype];
 	int len = var->len + start;
