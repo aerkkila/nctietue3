@@ -1258,6 +1258,8 @@ int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit)
 }
 
 int nct_link_data(nct_var* dest, nct_var* src) {
+    if (!src->data)
+	return 1;
     if (!src->nusers)
 	src->nusers = calloc(1, sizeof(int));
     ++*src->nusers;
