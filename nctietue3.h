@@ -559,8 +559,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  *	nct_rlazy | nct_rcoord is undefined behaviour.
  *	When reading a multifile, the second to last files are however read with nct_rlazy.
  * nct_rcoordall:
- *	Meaningful only when combined with nct_rcoord.
- *	Read all coordinates also from multifiles.
+ *	Like nct_rcoord but read all coordinates also from multifiles.
  * nct_requalfiles:
  *	Meaningful only when combined with nct_rcoord or nct_rlazy.
  *	When reading a multifile, the second to last files are not touched at all.
@@ -603,7 +602,7 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  */
 enum {
     nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
-    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=1<<7, nct_requalfiles=1<<8,
+    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=(1<<7)|nct_rcoord, nct_requalfiles=1<<8,
 };
 extern int nct_readflags;
 
