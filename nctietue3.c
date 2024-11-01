@@ -690,13 +690,16 @@ nct_set* _nct_create_simple(void* dt, int dtype, ...) {
     va_list args;
     va_start(args, dtype);
     nct_create_simple_v_gd(s, dt, dtype, args) -> owner = 1;
+    va_end(args);
     return s;
 }
 
 nct_set* _nct_create_simple_gd(nct_set* s, void* dt, int dtype, ...) {
     va_list args;
     va_start(args, dtype);
-    return nct_create_simple_v_gd(s, dt, dtype, args);
+    void *ret = nct_create_simple_v_gd(s, dt, dtype, args);
+    va_end(args);
+    return ret;
 }
 
 nct_var* nct_dim2coord(nct_var* var, void* src, nc_type dtype) {
@@ -844,7 +847,7 @@ next:;
     nct_return_error(NULL);
 }
 
-long nct_bsearch_(const nct_var* var, double value, int beforeafter) {
+long nct_bsearch(const nct_var* var, double value, int beforeafter) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
     if (var->endpos)
@@ -869,8 +872,6 @@ long nct_bsearch_(const nct_var* var, double value, int beforeafter) {
     ret -= beforeafter == -1 && nct_register;
     return ret;
 }
-
-long nct_find_sorted_(const nct_var* var, double value, int beforeafter) __attribute__((deprecated, alias("nct_bsearch_")));
 
 long nct_bsearch_time(const nct_var* var, time_t time, int beforeafter) {
     struct tm tm0;
@@ -1592,58 +1593,73 @@ short* __attribute__((malloc)) nct_time_to_year(const nct_var *timevar) {
     return years;
 }
 
-long nct_match_start(nct_var *dim0, nct_var *dim1) {
-    nct_var *dim[] = {dim0, dim1};
-    double start[] = {
-	nct_get_floating(dim[0], 0),
-	nct_get_floating(dim[1], 0),
-    };
-    int ichange = start[1] < start[0];
-    long ind = nct_bsearch(dim[ichange], start[!ichange], -1);
+long nct_match_startvalue(nct_var *dim, double val) {
+    long ind = nct_bsearch(dim, val, -1);
     if (ind < 0)
 	return 0;
-    double diff0 = start[!ichange] - nct_get_floating(dim[ichange], ind);
-    double diff1 = nct_get_floating(dim[ichange], ind+1) - start[!ichange];
-    if (diff1 < diff0)
-	ind++;
-    nct_set_rstart(dim[ichange], ind);
+    double diff0 = val - nct_get_floating(dim, ind);
+    double diff1 = nct_get_floating(dim, ind+1) - val;
+    ind += diff1 < diff0;
+    if (ind)
+	nct_set_rstart(dim, ind);
     return ind;
 }
 
-long nct_match_end(nct_var *dim0, nct_var *dim1) {
-    nct_var *dim[] = {dim0, dim1};
-    double end[] = {
-	nct_get_floating_last(dim[0], 1),
-	nct_get_floating_last(dim[1], 1),
-    };
-    int ichange = end[1] > end[0];
-    long ind = nct_bsearch(dim[ichange], end[!ichange], -1);
-    if (ind >= dim[ichange]->len-1)
+long nct_match_endvalue(nct_var *dim, double val) {
+    long ind = nct_bsearch(dim, val, -1);
+    if (ind >= dim->len-1)
 	return 0;
-    double diff0 = end[!ichange] - nct_get_floating(dim[ichange], ind);
-    double diff1 = nct_get_floating(dim[ichange], ind+1) - end[!ichange];
+    double diff0 = val - nct_get_floating(dim, ind);
+    double diff1 = nct_get_floating(dim, ind+1) - val;
     if (diff1 < diff0)
 	ind++;
-    long oldlen = dim[ichange]->len;
-    nct_set_length(dim[ichange], ind+1);
-    return oldlen - ind;
+    long oldlen = dim->len;
+    nct_set_length(dim, ind+1);
+    return oldlen - dim->len;
 }
 
-long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
-    nct_var* vars[] = {timevar0, timevar1};
-    nct_anyd time[2];
+long _nct_match_start(nct_var *dim0, ...) {
+    nct_var *dimn;
+    double maxval = nct_get_floating(dim0, 0);
 
-    for(int i=0; i<2; i++) {
-	time[i] = nct_timegm(vars[i], NULL, NULL, 0);
-	if (time[i].d < 0)
-	    nct_return_error(-1);
+    va_list valist0, valist1;
+    va_start(valist0, dim0);
+    va_copy(valist1, valist0);
+    while ((dimn = va_arg(valist0, nct_var*))) {
+	double val = nct_get_floating(dimn, 0);
+	if (val > maxval)
+	    maxval = val;
     }
+    va_end(valist0);
 
-    int smaller = time[1].a.t < time[0].a.t;
-    long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
-    long diff_n = diff_ms  / ms_per_timeunit[time[smaller].d];
-    nct_set_rstart(vars[smaller], nct_bsearch(vars[smaller], diff_n, -1));
-    return diff_n;
+    long change = nct_match_startvalue(dim0, maxval);
+    while ((dimn = va_arg(valist1, nct_var*)))
+	change += nct_match_startvalue(dimn, maxval);
+    va_end(valist1);
+
+    return change;
+}
+
+long _nct_match_end(nct_var *dim0, ...) {
+    nct_var *dimn;
+    double minval = nct_get_floating_last(dim0, 1);
+
+    va_list valist0, valist1;
+    va_start(valist0, dim0);
+    va_copy(valist1, valist0);
+    while ((dimn = va_arg(valist0, nct_var*))) {
+	double val = nct_get_floating_last(dimn, 1);
+	if (val < minval)
+	    minval = val;
+    }
+    va_end(valist0);
+
+    long change = nct_match_endvalue(dim0, minval);
+    while ((dimn = va_arg(valist1, nct_var*)))
+	change += nct_match_endvalue(dimn, minval);
+    va_end(valist1);
+
+    return change;
 }
 
 long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
@@ -1804,10 +1820,12 @@ end:
     return s;
 }
 
-void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nctype) {
+void* nct_read_from_nc_as(const char* filename, const char* varname, long *Length, nc_type nctype) {
     if (!varname) {
 	nct_readm_ncf(v, filename, nct_rlazy);
 	nct_var* var = nct_firstvar(&v);
+	if (Length)
+	    *Length = var->len;
 	if (!var) {
 	    nct_puterror("No variables in \"%s\"\n", filename);
 	    nct_free1(&v);
@@ -1826,10 +1844,12 @@ void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type nct
     ncfunk_open(filename, NC_NOWRITE, &ncid);
     ncfunk(nc_inq_varid, ncid, varname, &varid);
     ncfunk(nc_inq_var, ncid, varid, NULL, &dtype, &ndims, dimids, NULL);
-    for(int i=0; i<ndims; i++) {
+    for (int i=0; i<ndims; i++) {
 	ncfunk(nc_inq_dim, ncid, dimids[i], NULL, &len1);
 	len *= len1;
     }
+    if (Length)
+	*Length = len;
     if (nctype)
 	dtype = nctype;
     int size1 = nctypelen(dtype);

@@ -255,7 +255,7 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 /* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
 nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
-nct_att* nct_add_varatt(nct_var* var, nct_att* att);
+nct_att* nct_add_varatt(nct_var* var, nct_att* att); // copies the structure nct_att
 nct_att* nct_add_varatt_text(nct_var* var, char* name, char* value, unsigned freeable);
 nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 
@@ -346,21 +346,15 @@ void nct_finalize(); // calls nc_finalize to free memory used by netcdf
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 
-/* nct_bsearch (without underscore) is meant to be used as the function,
- * beforeafter is an optional argument with default value zero:
- *	 1: ret > find
- *	 0: ret ≥ find
- *	-1: ret ≤ find
- *	-2: ret < find
+/* beforeafter:
+ *	 1: var->data[ret] > value
+ *	 0: var->data[ret] ≥ value
+ *	-1: var->data[ret] ≤ value
+ *	-2: var->data[ret] < value
  * Sets nct_register to 0 (1) if the exact value was (wasn't) found.
+ * Data in var must be sorted.
  */
-long nct_bsearch_(const nct_var* var, double value, int beforeafter);
-#define _nct_bsearch(var, value, right, ...) nct_bsearch_(var, value, right)
-#define nct_bsearch(...) _nct_bsearch(__VA_ARGS__, 0)
-/* for backwards compatibility */
-long nct_find_sorted_(const nct_var* var, double value, int beforeafter) __attribute__((deprecated));
-#define nct_find_sorted nct_bsearch
-
+long nct_bsearch(const nct_var* var, double value, int beforeafter);
 long nct_bsearch_time(const nct_var* timevar, time_t time, int beforeafter);
 long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
 
@@ -450,10 +444,20 @@ nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_l
 struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
-/* Calls nct_set_rstart(nct_set_length) making both dimensions to start(end) as close to each other as possible.
+/* Calls nct_set_rstart (nct_set_length)
+   making all input dimensions to start (end) as close to each other as possible.
+   Returns the number of steps removed from all dimensions together.
+   The latest starting (earliest ending) dimension is left unchanged.
+   */
+#define nct_match_start(dim0, /*dim1, dim2,*/ ...) _nct_match_start(dim0, __VA_ARGS__, NULL)
+#define nct_match_end(dim0, /*dim1, dim2,*/ ... ) _nct_match_end(dim0, __VA_ARGS__, NULL)
+long _nct_match_start(nct_var *dim0, ...);
+long _nct_match_end(nct_var *dim0, ...);
+
+/* Calls nct_set_rstart (nct_set_length) to make the input dimension to start (end) as close to val as possible.
    Returns the number of steps removed. */
-long nct_match_start(nct_var *dim0, nct_var *dim1);
-long nct_match_end(nct_var *dim0, nct_var *dim1);
+long nct_match_startvalue(nct_var *dim, double val);
+long nct_match_endvalue(nct_var *dim, double val);
 
 /* Calls nct_set_rstart making both timevariables to start at the same time.
    Returns the number of timesteps removed or negative on error. */
@@ -500,13 +504,13 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is no
  * If this should use the values in the time coordinate instead of indices, one may write:
  * 	for (int t=0; t<100; t+=20) {
  *		nct_set_start(timevar, 0);
- *		nct_set_start(timevar, nct_find_sorted(timevar, t)); // broken
+ *		nct_set_start(timevar, nct_bsearch(timevar, t, 0)); // broken
  * 		nct_set_length(timevar 10);
  * 		nct_load(var);
  * 		do_stuff(var);
  * 	}
  *
- * The code above is broken because the length is set to 10 so anything beyond 10 is not found by nct_find_sorted.
+ * The code above is broken because the length is set to 10 so anything beyond 10 is not found by nct_bsearch.
  * There may be easier ways around this in this simple example
  * but in a more complex program one may want to push and pop the real length of timevar:
  * 	for (int t=0; t<100; t+=20) {
@@ -514,7 +518,7 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is no
  *		if (stack_not_empty(timevar))
  *			nct_set_length(timevar, nct_pop_integer(timevar));
  *		nct_push_integer(timevar, timevar->len);
- *		nct_set_start(timevar, nct_find_sorted(timevar, t));
+ *		nct_set_start(timevar, nct_bsearch(timevar, t, 0));
  * 		nct_set_length(timevar 10);
  * 		nct_load(var);
  * 		do_stuff(var);
@@ -614,8 +618,8 @@ extern int nct_readflags;
  *	See netcdf.h for options.
  *	If NC_NAT (=0), no conversion is done, otherwise data is converted to the type.
  */
-#define nct_read_from_nc(a, b) nct_read_from_nc_as(a, b, NC_NAT)
-void* nct_read_from_nc_as(const char* filename, const char* varname, nc_type type);
+#define nct_read_from_nc(a, b) nct_read_from_nc_as(a, b, NULL, NC_NAT)
+void* nct_read_from_nc_as(const char* filename, const char* varname, long *length_out, nc_type type);
 
 /* Reading netcdf files. See also nct_read_from_nc_as.
  * To allocate nct_set* into heap:
