@@ -203,7 +203,7 @@ failed:
 }
 
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
-		     int ndims, int* dimids) {
+    int ndims, int* dimids) {
     if (set->varcapacity < set->nvars+1)
 	if (!(set->vars = realloc(set->vars, (set->varcapacity=set->nvars+3)*sizeof(void*))))
 	    goto failed;
@@ -351,14 +351,14 @@ static nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation)
    Variable will not be loaded, except if the first is loaded and the second is not.
    When unloaded sets are concatenated, they must not be freed before loading the data.
    The following is hence an error:
-   *	concat(set0, set1) // var n is not loaded
-   *	free(set1)
-   *	load(set0->vars[n])
-   */
-nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars) {
-    int dimid0 = nct_get_dimid(vs0, dimname);
+ *	concat(set0, set1) // var n is not loaded
+ *	free(set1)
+ *	load(set0->vars[n])
+ */
+nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* concatdim, int howmany_left, const int* varids0, int nvars) {
+    int dimid0 = nct_get_dimid(vs0, concatdim);
     if (dimid0 < 0)
-	dimid0 = nct_dimid(nct_add_dim(vs0, 1, dimname));
+	dimid0 = nct_dimid(nct_add_dim(vs0, 1, concatdim));
     else if (vs0->dims[dimid0]->len == 0) {
 	/* Change length zero to one. We assume that such dimension does not belong to any variable. */
 	nct_var* dim = vs0->dims[dimid0];
@@ -370,7 +370,7 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
     }
 
     /* Concatenate the dimension. */
-    int dimid1 = nct_get_dimid(vs1, dimname);
+    int dimid1 = nct_get_dimid(vs1, concatdim);
     if (dimid1 < 0)
 	vs0->dims[dimid0]->len++;
     else {
@@ -386,8 +386,8 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
 
 	/* If the dimension is also a variable, concat that */
-	int varid0 = nct_get_varid(vs0, dimname);
-	int varid1 = nct_get_varid(vs1, dimname);
+	int varid0 = nct_get_varid(vs0, concatdim);
+	int varid1 = nct_get_varid(vs1, concatdim);
 
 	if (varid0 >= 0 && varid1 >= 0) {
 	    nct_att* att = nct_get_varatt(vs0->vars[varid0], "units"); // convert timeunits if the dimension is time
@@ -401,10 +401,10 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	}
     }
 
-    int dimname_is_new = 1;
+    int concatdim_is_new = 1;
     nct_foreach(vs0, var)
 	if (nct_get_vardimid(var, dimid0) >= 0) {
-	    dimname_is_new = 0;
+	    concatdim_is_new = 0;
 	    break; }
 
     /* Concatenate all variables.
@@ -416,7 +416,7 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* dimname, int h
 	nct_var* var1 = nct_get_var(vs1, var0->name);
 	if (!var1)
 	    continue;
-	if (dimname_is_new) {
+	if (concatdim_is_new) {
 	    size_t len = var0->len;
 	    nct_add_vardim_first(var0, dimid0);
 	    var0->len = len; // concatenation will also increase length so let's not do it twice
@@ -617,6 +617,23 @@ nct_att* nct_copy_att(nct_var* var, const nct_att* src) {
     return nct_add_varatt(var, &att);
 }
 
+static nct_var* find_corresponding_coord(nct_var *dim, nct_set *set) {
+    if (!nct_iscoord(dim))
+	return NULL;
+    for (int ivar=0; ivar<set->nvars; ivar++) {
+	nct_var *var = set->vars[ivar];
+	if (!nct_iscoord(var))
+	    continue;
+	if (var->len != dim->len || var->dtype != dim->dtype || !strstr(var->name, dim->name))
+	    continue;
+	if (var->data == dim->data)
+	    return var;
+	if (!memcmp(var->data, dim->data, dim->len * nct_typelen[dim->dtype]))
+	    return var;
+    }
+    return NULL;
+}
+
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
     nct_var* var;
     int n = src->ndims;
@@ -628,9 +645,14 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	/* Create the dimension if not present in dest. */
 	/* Create a new dimension if lengths mismatch in source and destination. */
 	if (dimids[i] < 0 || dest->dims[dimids[i]]->len != srcdim->len) {
-	    nct_var* dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
-	    dim->freeable_name = 1;
-	    nct_ensure_unique_name(dim);
+	    nct_var *dim = NULL;
+	    if (dimids[i] >= 0)
+		dim = find_corresponding_coord(srcdim, dest);
+	    if (!dim) {
+		dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
+		dim->freeable_name = 1;
+		nct_ensure_unique_name(dim);
+	    }
 	    dimids[i] = nct_dimid(dim);
 	}
 	dstdim = dest->dims[dimids[i]];
