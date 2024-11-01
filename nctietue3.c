@@ -85,6 +85,7 @@ static const char* const nct_timeunits[] = { TIMEUNITS };
 int nct_readflags, nct_ncret, nct_error_action, nct_verbose, nct_register;
 FILE* nct_stderr;
 void (*nct_after_load)(nct_var*, void*, size_t, const size_t*, const size_t*) = NULL;
+void (*nct_before_ncputvar)(nct_var*, int, int) = NULL;
 const short nct_typelen[] = {
     [NC_BYTE]=1, [NC_UBYTE]=1, [NC_SHORT]=2, [NC_USHORT]=2,
     [NC_INT]=4, [NC_UINT]=4, [NC_INT64]=8, [NC_UINT64]=8,
@@ -847,7 +848,7 @@ next:;
     nct_return_error(NULL);
 }
 
-long nct_bsearch(const nct_var* var, double value, int beforeafter) {
+long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
     double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
     size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
     if (var->endpos)
@@ -861,19 +862,20 @@ long nct_bsearch(const nct_var* var, double value, int beforeafter) {
     }
     double v0 = getfun(var, sem[0]),
 	   v1 = getfun(var, sem[1]);
-    nct_register = !(value==v0 || value==v1);
+    int equals = !(value==v0 || value==v1);
     long ret =
 	value<v0  ? sem[0] :
-	value==v0 ? sem[0] + (beforeafter==1) :
+	value==v0 ? sem[0] + (beforeafter==nct_gt) :
 	value<v1  ? sem[1] :
-	value==v1 ? sem[1] + (beforeafter==1) :
+	value==v1 ? sem[1] + (beforeafter==nct_gt) :
 	sem[1] + 1;
-    ret -= beforeafter == -2;
-    ret -= beforeafter == -1 && nct_register;
+    ret -= beforeafter == nct_lt;
+    ret -= beforeafter == nct_leq && equals;
+    nct_register = equals;
     return ret;
 }
 
-long nct_bsearch_time(const nct_var* var, time_t time, int beforeafter) {
+long nct_bsearch_time(const nct_var* var, time_t time, enum nct_beforeafter beforeafter) {
     struct tm tm0;
     nct_anyd epoch = nct_timegm0(var, &tm0);
     long diff_s = time - epoch.a.t;
@@ -881,7 +883,7 @@ long nct_bsearch_time(const nct_var* var, time_t time, int beforeafter) {
     return nct_bsearch(var, tofind, beforeafter);
 }
 
-long nct_bsearch_time_str(const nct_var* dim, const char *timestr, int beforeafter) {
+long nct_bsearch_time_str(const nct_var* dim, const char *timestr, enum nct_beforeafter beforeafter) {
     struct tm tm;
     nct__read_timestr(timestr, &tm);
     return nct_bsearch_time(dim, timegm(&tm), beforeafter);
@@ -1735,7 +1737,7 @@ void nct_print_atts(nct_var* var, const char* indent0, const char* indent1) {
 }
 
 void nct_print_var_meta(const nct_var* var, const char* indent) {
-    printf("%s%s%s %s%s(%zu)%s:\n%s  %i dimensions: ( ",
+    printf("%s%s%s %s%s(%zu)%s: %s  %i dimensions: ( ",
 	   indent, nct_type_color, nct_typenames[var->dtype],
 	   nct_varname_color, var->name, var->len, nct_default_color,
 	   indent, var->ndims);
@@ -1780,7 +1782,6 @@ static void _nct_print(nct_set* set, int nodata) {
     }
     if (nodata)
 	nct_foreach(set, var) {
-	    putchar('\n');
 	    nct_print_var_meta(var, "  ");
 	}
     else
@@ -2105,6 +2106,63 @@ nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char
     return set;
 }
 
+nct_set* nct_read_mfnc_ptr_args(struct nct_mf_args *args) {
+    regmatch_t **match = NULL;
+    char *new = NULL;
+    if (args->grouping[0]) {
+	int ptrlen = 0;
+	int n = 0;
+	char *ptr = args->names;
+	while (n != args->n && ptr) {
+	    int len = strlen(ptr)+1;
+	    ptrlen += len;
+	    ptr += len;
+	    n++;
+	}
+	args->n = n;
+	new = malloc(ptrlen+1);
+
+	match = malloc(args->n * sizeof(void*));
+	char *marks = args->grouping;
+	ptr = args->names;
+	char *newptr = new;
+	for (int ifile=0; ifile<args->n; ifile++) {
+	    int n = strlen(ptr),
+		ngroups=1;
+	    for (int i=0; i<n; i++)
+		ngroups += ptr[i] == marks[0];
+	    match[ifile] = malloc((ngroups) * sizeof(regmatch_t));
+	    int imatch = 0;
+	    int inew = 0;
+	    int start = 0;
+	    for (int i=0; i<n; i++)
+		if (ptr[i] == marks[0]) {
+		    memcpy(newptr+inew, ptr+start, i-start);
+		    inew += i-start;
+		    match[ifile][++imatch].rm_so = inew;
+		    start = i+1;
+		}
+		else if (ptr[i] == marks[1]) {
+		    memcpy(newptr+inew, ptr+start, i-start);
+		    inew += i-start;
+		    match[ifile][imatch--].rm_eo = inew;
+		    start = i+1;
+		}
+	    memcpy(newptr+inew, ptr+start, n-start+1);
+	    inew += n-start;
+	    match[ifile][0].rm_so = 0;
+	    match[ifile][0].rm_eo = inew;
+	    ptr += strlen(ptr)+1;
+	    newptr += strlen(newptr)+1;
+	}
+	args->names = new;
+    }
+    nct_set *ret = nct_read_mfncf_ptr1(args->names, args->readflags, args->n, args->concatdim, match, 0);
+    free(new);
+    free(match); // frees ptrptr; each pointer is in the struct fileinfo
+    return ret;
+}
+
 nct_set* nct_read_mfnc_regex(const char* filename, int regex_cflags, char* concat_args) {
     struct nct_mf_regex_args args = {
 	.regex = filename,
@@ -2375,6 +2433,8 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 	if (what & _defonly)
 	    continue;
 	if (load) nct_load(v);
+	if (nct_before_ncputvar)
+	    nct_before_ncputvar(v, ncid, id);
 	ncfunk(nc_put_var, ncid, id, v->data);
 	if (load) nct_unlink_data(v);
     }

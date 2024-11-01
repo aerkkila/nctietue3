@@ -48,6 +48,8 @@ extern FILE* nct_stderr;
    */
 extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t *fstart, const size_t *fcount);
 
+extern void (*nct_before_ncputvar)(nct_var* var, int ncid, int varid);
+
 extern const char *nct_backtrace_str; // see nct_bt for explanation
 extern const char *nct_backtrace_file;
 extern int nct_backtrace_line;
@@ -346,17 +348,18 @@ void nct_finalize(); // calls nc_finalize to free memory used by netcdf
 nct_var* nct_ensure_unique_name(nct_var* var);
 char* nct_find_unique_name_from(nct_set* set, const char* initname, int num);
 
+enum nct_beforeafter {nct_lt=-2, nct_leq, nct_geq, nct_gt};
 /* beforeafter:
- *	 1: var->data[ret] > value
- *	 0: var->data[ret] ≥ value
- *	-1: var->data[ret] ≤ value
- *	-2: var->data[ret] < value
+ *	 1 (nct_gt) : var->data[ret] > value
+ *	 0 (nct_geq): var->data[ret] ≥ value
+ *	-1 (nct_leq): var->data[ret] ≤ value
+ *	-2 (nct_lt) : var->data[ret] < value
  * Sets nct_register to 0 (1) if the exact value was (wasn't) found.
  * Data in var must be sorted.
  */
-long nct_bsearch(const nct_var* var, double value, int beforeafter);
-long nct_bsearch_time(const nct_var* timevar, time_t time, int beforeafter);
-long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, int beforeafter);
+long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter);
+long nct_bsearch_time(const nct_var* timevar, time_t time, enum nct_beforeafter beforeafter);
+long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, enum nct_beforeafter beforeafter);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);
@@ -648,9 +651,17 @@ struct nct_mf_regex_args {
     int dirnamelen_out, max_nfiles;
 };
 
+struct nct_mf_args {
+    char *names; // either char* or char**
+    int n, readflags;
+    char *concatdim;
+    char grouping[2];
+};
+
 /* Same as below but without readflags. */
 nct_set* nct_read_mfnc_regex(const char* filename_regex, int regex_cflags, char* concatdim);
 nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args*);
+nct_set* nct_read_mfnc_ptr_args(struct nct_mf_args*);
 
 /* Following is a trick that allows optional and keyword arguments for nct_read_mfnc_regex_opt.
  *	nct_set* set = nct_read_mfnc_regex_opt("foo\\([1-9]*\\)\\.nc", .nct_readflags=nct_rcoord, .nmatch=2, .return_groups=1);
@@ -658,7 +669,11 @@ nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args*);
 static inline nct_set* nct_read_mfnc_regex_opt_(struct nct_mf_regex_args args) {
     return nct_read_mfnc_regex_args(&args);
 }
+static inline nct_set* nct_read_mfnc_ptr_opt_(struct nct_mf_args args) {
+    return nct_read_mfnc_ptr_args(&args);
+}
 #define nct_read_mfnc_regex_opt(...) nct_read_mfnc_regex_opt_((struct nct_mf_regex_args){__VA_ARGS__});
+#define nct_read_mfnc_ptr_opt(...) nct_read_mfnc_ptr_opt_((struct nct_mf_args){__VA_ARGS__});
 
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);
