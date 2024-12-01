@@ -42,7 +42,7 @@ extern FILE* nct_stderr;
    Arguments
    *	var: The variable from the possible concatenation list. Not necessarily the root variable.
    *	data: The loaded data. var->data does not necessarily contain the loaded data.
-   *	len: how many elements were loaded.
+   *	len: how many elements were loaded this time. Using var->len instead of this is probably a bug.
    *	fstart: start location in filedimensions which was used as an argument to nc_get_vara
    *	fcount: similar to fstart but length. See nc_get_vara from netcdf documentation.
    */
@@ -429,12 +429,15 @@ int nct_link_stream(nct_var* dest, nct_var* src);
  * Load from index0 to index1. No more memory will be allocated than needed:
  *	nct_load_partially(var, index0, index1);
  */
-#define nct_load(var) nct_load_as(var, NC_NAT)
-#define nct_loadg(set, name) nct_load_as(nct_get_var(set, name), NC_NAT)
-#define nct_loadg_as(set, name, type) nct_load_as(nct_get_var(set, name), type)
-#define nct_load_partially(var, start, end) nct_load_partially_as(var, start, end, NC_NAT)
-nct_var* nct_load_partially_as(nct_var*, long start, long end, nc_type nctype);
 nct_var* nct_load_as(nct_var*, nc_type);
+nct_var* nct_load_partially_as(nct_var*, long start, long end, nc_type nctype);
+#define nct_load(var) nct_load_as(var, (var)->dtype)
+#define nct_loadg_as(set, name, type) nct_load_as(nct_get_var(set, name), type)
+#define nct_load_partially(var, start, end) nct_load_partially_as(var, start, end, (var)->dtype)
+static inline nct_var* nct_loadg(nct_set *set, const char *name) {
+    nct_var *var = nct_get_var(set, name);
+    return nct_load_as(var, var->dtype);
+}
 int	 nct_loadable(const nct_var*); // This check is always done in the load-function.
 
 /* Load only if needed. */
@@ -745,20 +748,20 @@ nct_var* nct_update_concatlist(nct_var*);
 
 /* This frees the data unless used by another variable (see nct_copy_var) or flagged as not_freeable.
  * Can be used to limit RAM usage:
- *      nct_readmf(set, "some.nc", nct_rlazy);
+ *      nct_set *set = nct_read_ncf("some.nc", nct_rcoord|nct_rkeep);
  *	nct_foreach(set, var) {
  *		nct_load(var);
  *		do_stuff(var);
  *		nct_unlink_data(var);
  *	}
- *	nct_free1(&set);
+ *	nct_free1(set);
  *
  *  --same functionality but larger RAM usage below--
  *
- *	nct_readm(set, "some.nc");
+ *	nct_set *set = nct_read_ncf(set, "some.nc", 0);
  *	nct_foreach(set, var)
  *		do_stuff(var);
- *	nct_free1(&set);
+ *	nct_free1(set);
  */
 void nct_unlink_data(nct_var*);
 

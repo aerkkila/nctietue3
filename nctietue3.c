@@ -1716,7 +1716,7 @@ nct_var* nct_perhaps_load_partially_as(nct_var* var, long start, long end, nc_ty
 }
 
 nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end) {
-    return nct_perhaps_load_partially_as(var, start, end, NC_NAT);
+    return nct_perhaps_load_partially_as(var, start, end, var->dtype);
 }
 
 long long nct_pop_integer(nct_var* var) {

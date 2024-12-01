@@ -79,7 +79,7 @@ static void load_stream(nct_var* var, loadinfo_t* info) {
 
 static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
     long carry = 0, num, dimlen = 1;
-    for(int i=ndims-1; i>=0; i--) {
+    for (int i=ndims-1; i>=0; i--) {
 	num = arr[i]*dimlen + carry;
 	long next_dimlen = dimlen * dims[i];
 	long num_thisdim = num % next_dimlen;
@@ -94,7 +94,7 @@ static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
 static size_t get_read_length(const nct_var* var) {
     long length = 1;
     int ndims = var->nfiledims;
-    for(int i=0; i<ndims; i++) {
+    for (int i=0; i<ndims; i++) {
 	long omitted, omit0, omit1;
 	long flen = var->filedimensions[ndims-i-1];
 	const nct_var* dim = nct_get_vardim(var, var->ndims-i-1);
@@ -224,7 +224,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 	    info->fcount[i] -= move[i];
 	    /* We can only read rectangles, and hence, we must stop at the first such dimension from behind,
 	       where startpos is in the middle of the used area. */
-	    for(int j=0; j<i; j++)
+	    for (int j=0; j<i; j++)
 		info->fcount[j] = 1;
 	    break;
 	}
@@ -237,10 +237,10 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
     printf("Loading %zu %% (%zu / %zu); n=%zu; start={%li",
 	    (info->pos+len)*100/info->ndata, info->pos+len, info->ndata, len, info->fstart[0]);
-    for(int i=1; i<var->nfiledims; i++)
+    for (int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fstart[i]);
     printf("}; count={%li", info->fcount[0]);
-    for(int i=1; i<var->nfiledims; i++)
+    for (int i=1; i<var->nfiledims; i++)
 	printf(", %li", info->fcount[i]);
     printf("}; from %i: %s (%s)", info->ifile, nct_get_filename_var(var), var->name);
     nct_verbose_line_ending();
@@ -268,7 +268,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	info->ifile++;
 	return 0;
     }
-    /* If this wasn't the first file, we call this function again to handle
+    /* If this wasn't the first file, this function is called again to handle
        concatenation rules correctly on this file. */
     nct_var* var1 = from_concatlist(var, filenum-1);
     long old_start = info->start;
