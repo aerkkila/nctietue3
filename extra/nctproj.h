@@ -14,10 +14,7 @@ typedef struct {
  */
 FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
 
-/* Like nctproj_open_converted above but additionally creates a new variable whose data comes from the stream.
-   Data is loaded by nct_load_stream but also the FILE can be accessed with nct_get_stream.
-   Use of nct_load with this variable is undefined.
-   The stream will be closed when nct_free_var is called. */
+/* Like nctproj_open_converted above but additionally creates a new variable whose data comes from the stream. */
 nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
 
 /* If geod_a <= 0, WGS84 is used as the ellipsoid. */
