@@ -1366,7 +1366,7 @@ static int perhaps_open_the_file(nct_var* var) {
 	}
 	return info->ncid;
     }
-    else if (var->super->ncid >= 0)
+    else if (var->super->ncid > 0)
 	return var->super->ncid;
 
     if (!var->super->fileinfo)
