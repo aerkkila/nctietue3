@@ -897,6 +897,33 @@ long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeaf
     return ret;
 }
 
+long nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
+    double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
+    size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
+    if (var->endpos)
+	sem[1] = Min(var->endpos - var->startpos - 1, var->len-1);
+    while (1) {
+	if (sem[1]-sem[0] <= 1)
+	    break;
+	double try = getfun(var, sem[2]);
+	sem[try<value] = sem[2]; // if (try<value) end = mid; else start = mid;
+	sem[2] = (sem[0]+sem[1]) / 2;
+    }
+    double v0 = getfun(var, sem[1]),
+	   v1 = getfun(var, sem[0]);
+    int equals = !(value==v0 || value==v1);
+    long ret =
+	value<v0  ? sem[1] :
+	value==v0 ? sem[1] - (beforeafter==nct_gt) :
+	value<v1  ? sem[0] :
+	value==v1 ? sem[0] - (beforeafter==nct_gt) :
+	sem[0] - 1;
+    ret += beforeafter == nct_lt;
+    ret += beforeafter == nct_leq && equals;
+    nct_register = equals;
+    return ret;
+}
+
 long nct_bsearch_time(const nct_var* var, time_t time, enum nct_beforeafter beforeafter) {
     struct tm tm0;
     nct_anyd epoch = nct_timegm0(var, &tm0);

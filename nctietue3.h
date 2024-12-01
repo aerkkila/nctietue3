@@ -143,6 +143,7 @@ extern int nct_error_action;
    To disable error messages, use nct_stderr instead of this. */
 extern int nct_verbose;
 enum {nct_verbose_overwrite=1, nct_verbose_newline};
+void nct_verbose_line_ending(); // not documented
 
 union nct_any {
     char hhi;
@@ -358,6 +359,7 @@ enum nct_beforeafter {nct_lt=-2, nct_leq, nct_geq, nct_gt};
  * Data in var must be sorted.
  */
 long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter);
+long nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter beforeafter);
 long nct_bsearch_time(const nct_var* timevar, time_t time, enum nct_beforeafter beforeafter);
 long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, enum nct_beforeafter beforeafter);
 
