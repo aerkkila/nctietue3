@@ -205,7 +205,7 @@ static nct_set* _nct_read_var_info(nct_set *set, int varid, int flags) {
 	att->value    = malloc(len*nctypelen(dtype) + (dtype==NC_CHAR));
 	att->dtype    = dtype;
 	att->len      = len;
-	att->freeable = 3;
+	att->freeable = nct_ref_name|nct_ref_content|nct_ref_string;
 	ncfunk(nc_get_att, set->ncid, varid, name, att->value);
 	if (att->dtype == NC_CHAR) {
 	    if (!att->len) {
