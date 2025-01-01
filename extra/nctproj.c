@@ -13,7 +13,7 @@
 typedef struct {
 	void* src;
 	long len_old, xylen_old, pos, len, xlen, ylen;
-	int* whence, size1;
+	int *whence, size1, *src_nusers, not_freeable;
 	char nan[8];
 } nctproj_cookie;
 
@@ -208,6 +208,13 @@ int seek_converted(void* vc, __off64_t* pos, int seek) {
 int close_converted(void* vc) {
 	nctproj_cookie* c = vc;
 	c->whence = (free(c->whence), NULL);
+	if (!*c->src_nusers) {
+		free(c->src_nusers);
+		if (!c->not_freeable)
+			free(c->src);
+	}
+	else
+		--*c->src_nusers;
 	free(c);
 	return 0;
 }
@@ -226,12 +233,14 @@ cookie_io_functions_t nctproj_functions = {
 /* Things above are only meant for internal use.
    Things below are meant for public use. */
 
-FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* to, nctproj_args_t* args) {
-	if (var->ndims < 2)
-		return NULL;
+FILE* nctproj_open_converted(nct_var* var, const char* from, const char* to, nctproj_args_t* args) {
+	if (var->ndims < 2 && nct_get_stream(var)) { // not implemented for streams
+		nct_puterror("cannot open converted variable");
+		return NULL; }
+
 	nctproj_cookie *c = malloc(sizeof(nctproj_cookie));
 	*c = (nctproj_cookie){
-		.pos	 = 0,
+		.pos = 0,
 			.len_old = var->len,
 			.size1 = nctypelen(var->dtype),
 	};
@@ -239,9 +248,12 @@ FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* t
 	c->len = var->ndims > 2 ?
 		var->len / nct_get_len_from(var, var->ndims-2) * c->xlen * c->ylen :
 		c->xlen * c->ylen;
-	if (nct_get_stream(var))
-		return NULL; // not implemented for streams
 	c->src = var->data;
+	if (!var->nusers)
+		var->nusers = calloc(1, sizeof(*var->nusers));
+	++*var->nusers;
+	c->src_nusers = var->nusers;
+	c->not_freeable = var->not_freeable;
 
 	/* fill value */
 	if (var->dtype == NC_FLOAT) {
@@ -258,7 +270,7 @@ FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* t
 	return fopencookie(c, "r", nctproj_functions);
 }
 
-nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const char* to, nctproj_args_t* args) {
+nct_var* nctproj_open_converted_var(nct_var* var, const char* from, const char* to, nctproj_args_t* args) {
 	nctproj_args_t _args = {0};
 	if (!args)
 		args = &_args;

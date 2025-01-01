@@ -12,10 +12,10 @@ typedef struct {
  * (longitude, latitude) in degrees:
  *	"+proj=longlat"
  */
-FILE* nctproj_open_converted(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
+FILE* nctproj_open_converted(nct_var* var, const char* from, const char* to, nctproj_args_t*);
 
 /* Like nctproj_open_converted above but additionally creates a new variable whose data comes from the stream. */
-nct_var* nctproj_open_converted_var(const nct_var* var, const char* from, const char* to, nctproj_args_t*);
+nct_var* nctproj_open_converted_var(nct_var* var, const char* from, const char* to, nctproj_args_t*);
 
 /* If geod_a <= 0, WGS84 is used as the ellipsoid. */
 double* nctproj_get_areas_lat_regular(const nct_var* lat, double lonstep, double geod_a, double geod_rf)
