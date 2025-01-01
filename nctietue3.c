@@ -2727,12 +2727,12 @@ char* nct__sort_str(char* dst, const char* restrict src, int n, void* other[2], 
 	memset(used, 0, n);
 	int ind, indstr, breakflag, n_sorted=0;
 	/* Each loop finds one element which is inserted at the start of the unsorted space. */
-	while(1) {
+	while (1) {
 		sptr = src;
 		strptr = NULL;
 		ind = indstr = 0;
 		breakflag = 1;
-		while(*sptr) {
+		while (*sptr) {
 			if (!used[ind]) {
 				breakflag = 0;
 				if (!strptr || strcmpfun(sptr, strptr) < 0) {

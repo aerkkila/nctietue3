@@ -35,7 +35,7 @@ action_needed:
 	}
 
 	size_t lengths_new[var->ndims], strides_old[var->ndims], strides_new[var->ndims];
-	for(int i=var->ndims-1; i>=0; i--) {
+	for (int i=var->ndims-1; i>=0; i--) {
 		if (i == var->ndims-1) {
 			strides_new[var->ndims-1] = 1;
 			lengths_new[var->ndims-1] = nct_get_vardim(var, order[var->ndims-1])->len;
@@ -54,16 +54,16 @@ action_needed:
 	var->capacity = var->len;
 	int help[var->ndims];
 	memcpy(help, var->dimids, var->ndims*sizeof(int));
-	for(int i=var->ndims-1; i>=0; i--)
+	for (int i=var->ndims-1; i>=0; i--)
 		var->dimids[i] = help[order[i]];
 	return var;
 }
 
 nct_var* nct_transpose_names_ptr(nct_var* var, const char* const* names) {
 	int order[var->ndims];
-	for(int i=var->ndims-1; i>=0; i--) {
+	for (int i=var->ndims-1; i>=0; i--) {
 		int j;
-		for(j=var->ndims-1; j>=0; j--)
+		for (j=var->ndims-1; j>=0; j--)
 			if (!strcmp(names[i], nct_get_vardim(var, j)->name))
 				goto found;
 		nct_puterror("dimension %s not found\n", names[i]);
@@ -78,7 +78,7 @@ nct_var* nct_transpose_order(nct_var* var, ...) {
 	int order[var->ndims];
 	va_list valist;
 	va_start(valist, var);
-	for(int i=0; i<var->ndims; i++)
+	for (int i=0; i<var->ndims; i++)
 		order[i] = va_arg(valist, int);
 	va_end(valist);
 	return nct_transpose_order_ptr(var, order);
@@ -88,7 +88,7 @@ nct_var* nct_transpose_names(nct_var* var, ...) {
 	const char* names[var->ndims];
 	va_list valist;
 	va_start(valist, var);
-	for(int i=0; i<var->ndims; i++)
+	for (int i=0; i<var->ndims; i++)
 		names[i] = va_arg(valist, const char*);
 	va_end(valist);
 	return nct_transpose_names_ptr(var, names);
