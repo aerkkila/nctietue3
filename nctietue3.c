@@ -2592,8 +2592,6 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
 	num = 0;
 	int room_groups = 0;
 	regmatch_t **saved_groups = args.nmatch ? malloc((room_groups=1024) * sizeof(void*)) : NULL;
-	/*regmatch_t regbuff[args.nmatch];
-	  regmatch_t *group_ptr = regbuff;*/
 	regmatch_t* groups_next_ptr = malloc(args.nmatch * sizeof(regmatch_t));
 
 	while ((entry = readdir(dp))) {
@@ -2609,12 +2607,8 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
 		if (lmatch+len+1 > smatch) {
 			smatch = lmatch + len + 1024;
 			match = realloc(match, smatch);
-			/*if (args.fun)
-			 *args.dest = realloc(*args.dest, smatch*args.size1dest);*/
 		}
 		sprintf(match+lmatch, "%s/%s", dirname, entry->d_name);
-		/*if (args.fun)
-		  args.fun(entry->d_name, num, group_ptr, *args.dest);*/
 		lmatch += len;
 		num++;
 	}
@@ -2628,19 +2622,11 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
 	}
 
 	char* sorted = malloc(lmatch+1);
-	/*void* sorted_dest = args.fun ? malloc(lmatch*args.size1dest) : NULL;
-	  void* destarrbuff[] = {sorted_dest, args.dest ? *args.dest : NULL};
-	  void* destarr = args.fun ? destarrbuff : NULL;*/
 
 	regmatch_t **saved_groups_sorted = args.nmatch ? malloc(num * sizeof(void*)) : NULL;
 	void** ptrsbuff[] = {(void**)saved_groups_sorted, (void**)saved_groups};
 	void*** ptrs = saved_groups ? ptrsbuff : NULL;
 	nct__sort_str(sorted, match, num, NULL, 0, ptrs, args.strcmpfun_for_sorting? args.strcmpfun_for_sorting: strcmp);
-
-	/*if (args.fun) {
-	  free(*args.dest);
-	 *args.dest = sorted_dest;
-	 }*/
 
 	if (args.nmatch) {
 		argsp->groups_out = saved_groups_sorted;
@@ -2648,6 +2634,7 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
 	}
 
 	argsp->dirnamelen_out = dlen+1;
+	argsp->nfiles_out = num;
 
 	free(match);
 	free(dirname);

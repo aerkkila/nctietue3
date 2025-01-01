@@ -653,7 +653,7 @@ struct nct_mf_regex_args {
 	void *strcmpfun_for_sorting;
 	int nmatch, return_groups;
 	regmatch_t **groups_out;
-	int dirnamelen_out, max_nfiles;
+	int dirnamelen_out, max_nfiles, nfiles_out;
 };
 
 struct nct_mf_args {
