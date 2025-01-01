@@ -441,7 +441,7 @@ static inline nct_var* nct_loadg(nct_set *set, const char *name) {
 	nct_var *var = nct_get_var(set, name);
 	return nct_load_as(var, var->dtype);
 }
-int	 nct_loadable(const nct_var*); // This check is always done in the load-function.
+int nct_loadable(const nct_var*); // This check is always done in the load-function.
 
 /* Load only if needed. */
 nct_var* nct_perhaps_load_partially_as(nct_var* var, long start, long end, nc_type nctype);
