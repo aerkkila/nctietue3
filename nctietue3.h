@@ -40,12 +40,12 @@ extern FILE* nct_stderr;
    For example if multiple files are concatenated by nct_load
    and all of them contain an attribute telling a number to multiply data with.
    Arguments
-   *	var: The variable from the possible concatenation list. Not necessarily the root variable.
-   *	data: The loaded data. var->data does not necessarily contain the loaded data.
-   *	len: how many elements were loaded this time. Using var->len instead of this is probably a bug.
-   *	fstart: start location in filedimensions which was used as an argument to nc_get_vara
-   *	fcount: similar to fstart but length. See nc_get_vara from netcdf documentation.
-   */
+ *	var: The variable from the possible concatenation list. Not necessarily the root variable.
+ *	data: The loaded data. var->data does not necessarily contain the loaded data.
+ *	len: how many elements were loaded this time. Using var->len instead of this is probably a bug.
+ *	fstart: start location in filedimensions which was used as an argument to nc_get_vara
+ *	fcount: similar to fstart but length. See nc_get_vara from netcdf documentation.
+ */
 extern void (*nct_after_load)(nct_var* var, void* data, size_t len, const size_t *fstart, const size_t *fcount);
 
 extern void (*nct_before_ncputvar)(nct_var* var, int ncid, int varid);
@@ -55,54 +55,54 @@ extern const char *nct_backtrace_file;
 extern int nct_backtrace_line;
 
 #define nct_other_error switch(nct_error_action) {	\
-    case nct_auto:				\
-    case nct_interrupt: asm("int $3"); break;	\
-    default:;					\
+	case nct_auto:				\
+	case nct_interrupt: asm("int $3"); break;	\
+	default:;					\
 }
 
 #define nct_return_error(val) switch(nct_error_action) {	\
-    case nct_auto:					\
-    case nct_interrupt: asm("int $3"); /* no break */	\
-    default: return val;				\
+	case nct_auto:					\
+	case nct_interrupt: asm("int $3"); /* no break */	\
+	default: return val;				\
 }
 
 #define nct_backtrace()		\
-    do {			\
-	if (nct_backtrace_str)	\
-	    fprintf(nct_stderr? nct_stderr: stderr, "%sError from%s %s %sat %s:%i:%s\n",		\
-		nct_backtrace_color, nct_default_color, nct_backtrace_str, 				\
-		nct_backtrace_color, nct_backtrace_file, nct_backtrace_line, nct_default_color);	\
-    } while (0)
+	do {			\
+		if (nct_backtrace_str)	\
+		fprintf(nct_stderr? nct_stderr: stderr, "%sError from%s %s %sat %s:%i:%s\n",		\
+			nct_backtrace_color, nct_default_color, nct_backtrace_str, 				\
+			nct_backtrace_color, nct_backtrace_file, nct_backtrace_line, nct_default_color);	\
+	} while (0)
 
 #define nct_puterror(...)	\
-    do {			\
-	nct_backtrace();	\
-	fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
-				fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__);	\
-    } while(0)
+	do {			\
+		nct_backtrace();	\
+		fprintf(nct_stderr? nct_stderr: stderr, "%sError%s (%s: %i):\n", nct_error_color, nct_default_color, __FILE__, __LINE__);	\
+		fprintf(nct_stderr? nct_stderr: stderr, "    " __VA_ARGS__);	\
+	} while(0)
 
 #define ncerror(arg) fprintf(nct_stderr? nct_stderr: stderr, "%sNetcdf-error%s (%s: %i):\n    %s\n",	\
-			     nct_error_color, nct_default_color, __FILE__, __LINE__, nc_strerror(arg))
+	nct_error_color, nct_default_color, __FILE__, __LINE__, nc_strerror(arg))
 
 #define ncfunk(fun, ...)			\
-    do {					\
-	if((nct_ncret = fun(__VA_ARGS__))) {	\
-	    nct_backtrace();			\
-	    ncerror(nct_ncret);			\
-	    nct_other_error;			\
-	}					\
-    } while(0)
+	do {					\
+		if((nct_ncret = fun(__VA_ARGS__))) {	\
+			nct_backtrace();			\
+			ncerror(nct_ncret);			\
+			nct_other_error;			\
+		}					\
+	} while(0)
 
 /* For better error messages:
  *	nct_bt(nct_set *a = nct_read_ncf("file.nc", nct_rcoord))
  * Now error message shows that nct_set *a = nct_read_ncf("file.nc", nct_rcoord) caused the error.
  */
 #define nct_bt(...) 			\
-    nct_backtrace_str = #__VA_ARGS__;	\
-    nct_backtrace_file = __FILE__;	\
-    nct_backtrace_line = __LINE__;	\
-    __VA_ARGS__;			\
-    nct_backtrace_str = NULL
+	nct_backtrace_str = #__VA_ARGS__;	\
+nct_backtrace_file = __FILE__;	\
+nct_backtrace_line = __LINE__;	\
+__VA_ARGS__;			\
+nct_backtrace_str = NULL
 
 /* bits to use in freeable or owner flags, e.g. (nct_att(a)).freeable = nct_ref_content */
 #define nct_ref_content	(1<<0)
@@ -118,12 +118,12 @@ extern const short nct_typelen[];
 
 #ifndef NCT_NO_VERSION_CHECK
 static void __attribute__((constructor)) nct_check_version() {
-    if (__nct_version_in_executable != __nct_version_in_library)
-	goto fail;
-    return;
+	if (__nct_version_in_executable != __nct_version_in_library)
+		goto fail;
+	return;
 fail: __attribute__((cold));
-    nct_puterror("The program has to be recompiled.\n");
-    exit(50);
+	  nct_puterror("The program has to be recompiled.\n");
+	  exit(50);
 }
 #endif
 
@@ -146,102 +146,102 @@ enum {nct_verbose_overwrite=1, nct_verbose_newline};
 void nct_verbose_line_ending(); // not documented
 
 union nct_any {
-    char hhi;
-    char c;
-    unsigned char hhu;
-    short hi;
-    unsigned short hu;
-    int i;
-    unsigned u;
-    long long lli;
-    long long unsigned llu;
-    float f;
-    double lf;
-    void* v;
-    time_t t;
+	char hhi;
+	char c;
+	unsigned char hhu;
+	short hi;
+	unsigned short hu;
+	int i;
+	unsigned u;
+	long long lli;
+	long long unsigned llu;
+	float f;
+	double lf;
+	void* v;
+	time_t t;
 };
 
 struct nct_fileinfo_t {
-    const char *name;
-    int dirnamelen;
-    regmatch_t *groups;
-    int ncid, ismem_t, nusers; // ncid is only used if variable has a separate fileinfo
-    unsigned nct_readflags;
+	const char *name;
+	int dirnamelen;
+	regmatch_t *groups;
+	int ncid, ismem_t, nusers; // ncid is only used if variable has a separate fileinfo
+	unsigned nct_readflags;
 };
 
 /* Getcontent can be needed, if content is NULL or nct_rkeepmem is not used.
    It could be for example nct__lz4_getcontent. */
 struct nct_fileinfo_mem_t {
-    struct nct_fileinfo_t fileinfo;
-    size_t size;	// size of the file in bytes
-    void* content;	// content of the file
-    unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
-    void* (*getcontent)(const char* filename, size_t* size_out);
+	struct nct_fileinfo_t fileinfo;
+	size_t size;	// size of the file in bytes
+	void* content;	// content of the file
+	unsigned owner;	// bitmask: nct_ref_content, nct_ref_name
+	void* (*getcontent)(const char* filename, size_t* size_out);
 };
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-    nct_r_start, nct_r_concat, nct_r_stream, nct_r_nrules,
-    /* The following rules are only boolean in bitmask, not in the array of rules. */
-    nct_r_mem, nct_r_list,
+	nct_r_start, nct_r_concat, nct_r_stream, nct_r_nrules,
+	/* The following rules are only boolean in bitmask, not in the array of rules. */
+	nct_r_mem, nct_r_list,
 } nct_rule_e;
 typedef struct {
-    nct_any arg;
-    int n;		// if arg.v is list
-    int capacity;	// if arg.v is list
+	nct_any arg;
+	int n;		// if arg.v is list
+	int capacity;	// if arg.v is list
 } nct_rule;
 
 struct nct_att {
-    char*    name;
-    void*    value;
-    nc_type  dtype;
-    int      len;
-    unsigned freeable;
+	char*    name;
+	void*    value;
+	nc_type  dtype;
+	int      len;
+	unsigned freeable;
 };
 
 #define nct_maxdims 5
 struct nct_var {
-    nct_set*	super;
-    int		id_dim,	// location of this in set->dims + 1, if exists there
-		id_var,	// location of this in set->vars + 1, if exists there
-		ncid;	// ncid of the variable if this is a coordinate (both dim and var)
-    char*	name;
-    char	freeable_name;
-    int		ndims, nfiledims, dimcapacity;
-    int*	dimids; // dimensions in the virtual file which may consist of multiple real files
-    int		natts, attcapacity;
-    nct_att*	atts;
-    size_t	len, capacity;
-    long	startpos, endpos; // if virtual file is loaded partially, from which to which index
-    long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
-    nc_type	dtype;
-    int		not_freeable;
-    int 	*nusers, *nusers_stream; // the first user is not counted
-    void*	data;
-    unsigned	rules; // a bitmask of rules which are in use
-    nct_rule	rule[nct_r_nrules];
-    int		stackbytes, stackcapasit;
-    void*	stack;
-    /* private */
-    struct nct_fileinfo_t*	fileinfo; // only used in some cases if different from this->super->fileinfo
+	nct_set*	super;
+	int		id_dim,	// location of this in set->dims + 1, if exists there
+			id_var,	// location of this in set->vars + 1, if exists there
+			ncid;	// ncid of the variable if this is a coordinate (both dim and var)
+	char*	name;
+	char	freeable_name;
+	int		ndims, nfiledims, dimcapacity;
+	int*	dimids; // dimensions in the virtual file which may consist of multiple real files
+	int		natts, attcapacity;
+	nct_att*	atts;
+	size_t	len, capacity;
+	long	startpos, endpos; // if virtual file is loaded partially, from which to which index
+	long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
+	nc_type	dtype;
+	int		not_freeable;
+	int 	*nusers, *nusers_stream; // the first user is not counted
+	void*	data;
+	unsigned	rules; // a bitmask of rules which are in use
+	nct_rule	rule[nct_r_nrules];
+	int		stackbytes, stackcapasit;
+	void*	stack;
+	/* private */
+	struct nct_fileinfo_t*	fileinfo; // only used in some cases if different from this->super->fileinfo
 };
 
 struct nct_set {
-    int		nvars, varcapacity;
-    nct_var**	vars;
-    int		ndims, dimcapacity;
-    nct_var**	dims; // points to a variable with the same name if available
-    int		natts, attcapacity;
-    nct_att*	atts;
-    int		ncid, owner;
-    /* private */
-    void*	fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
-    unsigned	rules;		// a bitmask of rules which are in use
+	int		nvars, varcapacity;
+	nct_var**	vars;
+	int		ndims, dimcapacity;
+	nct_var**	dims; // points to a variable with the same name if available
+	int		natts, attcapacity;
+	nct_att*	atts;
+	int		ncid, owner;
+	/* private */
+	void*	fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
+	unsigned	rules;		// a bitmask of rules which are in use
 };
 
 struct nct_anyd {
-    nct_any a;
-    long    d;
+	nct_any a;
+	long    d;
 };
 
 #define nct_isset(set) (sizeof(set)==sizeof(nct_set)) // whether this is nct_var or nct_set
@@ -254,7 +254,7 @@ struct nct_anyd {
 
 nct_var* nct_add_dim(nct_set* set, size_t len, char* name);
 nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
-		     int ndims, int* dimids); // undo with nct_rm_var
+	int ndims, int* dimids); // undo with nct_rm_var
 /* Calls nct_add_var with ndims = set->ndims and dimids = {0,1,2,3,...,ndims-1} */
 nct_var* nct_add_var_alldims(nct_set* set, void* src, nc_type dtype, char* name);
 
@@ -265,24 +265,24 @@ nct_var* nct_add_vardim_first(nct_var* var, int dimid);
 void nct_close_nc(int *ncid); // calls nc_close(ncid)
 
 /*
-concat(set0, set1, "time") {
-	Muuttujat, joissa ei ole ulottuvuutta "time" {
-		Ellei missään muuttujassa set0:ssa ole ulottuvuutta "time",
-		jokaiseen muuttujaan lisätään kyseinen ulottuvuus ja yhdistetään siten.
-		Muuten lisätään toisen niminen ulottuvuus.
-	}
-}
+   concat(set0, set1, "time") {
+   Muuttujat, joissa ei ole ulottuvuutta "time" {
+   Ellei missään muuttujassa set0:ssa ole ulottuvuutta "time",
+   jokaiseen muuttujaan lisätään kyseinen ulottuvuus ja yhdistetään siten.
+   Muuten lisätään toisen niminen ulottuvuus.
+   }
+   }
 
-concat(set0, set1, "-v:$@_$1") {
-	-v: liitetään erillisinä muuttujina
-	-v:args: args kuvaa, miten nimetään uudelleen {
-		$$: merkki '$'
-		$@: alkuperäinen muuttujan nimi
-		$n: n. ryhmä mahdollisesta säännöllisestä lausekkeesta, missä 0. on koko osuma.
-		Jos tiedoston "joo1234ei.nc" nimi haettiin säännöllisellä lauseella: R"(^joo\([0-9]\+\)ei\.nc$)",
-		muuttujan "hoo" nimeksi tulisi "hoo_1234"
-	}
-}*/
+   concat(set0, set1, "-v:$@_$1") {
+   -v: liitetään erillisinä muuttujina
+   -v:args: args kuvaa, miten nimetään uudelleen {
+   $$: merkki '$'
+   $@: alkuperäinen muuttujan nimi
+   $n: n. ryhmä mahdollisesta säännöllisestä lausekkeesta, missä 0. on koko osuma.
+   Jos tiedoston "joo1234ei.nc" nimi haettiin säännöllisellä lauseella: R"(^joo\([0-9]\+\)ei\.nc$)",
+   muuttujan "hoo" nimeksi tulisi "hoo_1234"
+   }
+   }*/
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars);
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
 nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
@@ -369,10 +369,10 @@ nct_var* nct_prevvar(const nct_var*);
 nct_var* nct_lastvar(const nct_set*);
 
 #define nct_foreach(set, var) \
-    for(nct_var* var=nct_firstvar(set); var; var=nct_nextvar(var))
+	for(nct_var* var=nct_firstvar(set); var; var=nct_nextvar(var))
 
 #define nct_for_concatlist(invar, outvar) \
-    for(nct_var* outvar=nct_iterate_concatlist(invar); outvar; outvar=nct_iterate_concatlist(NULL))
+	for(nct_var* outvar=nct_iterate_concatlist(invar); outvar; outvar=nct_iterate_concatlist(NULL))
 
 #define nct_free(...) _nct_free(0, __VA_ARGS__, -1)
 void _nct_free(int _, ...); // first argument is meaningless
@@ -388,11 +388,11 @@ long long	nct_get_varatt_integer(const nct_var *var, const char *name, int ind);
 nct_var*	nct_get_dim(const nct_set* set, const char* name);
 nct_var*	nct_get_var(const nct_set* set, const char* name);
 nct_var*	nct_get_vardim(const nct_var* var, int num);
-int		nct_get_vardimid(const nct_var* restrict var, int dimid);
+int			nct_get_vardimid(const nct_var* restrict var, int dimid);
 void		nct_get_vardims_list(const nct_var* var, ...); // nct_var **vardim0, nct_var **vardim1, ...
 void		nct_get_varshape_list(const nct_var* var, ...); // long *lendim0, long *lendim1, ...
-int		nct_get_varid(const nct_set* restrict, const char* restrict);
-int		nct_get_dimid(const nct_set* restrict, const char* restrict);
+int			nct_get_varid(const nct_set* restrict, const char* restrict);
+int			nct_get_dimid(const nct_set* restrict, const char* restrict);
 size_t		nct_get_len_from(const nct_var*, int startdim);
 long		nct_get_interval_ms(enum nct_timeunit timeunit_enumeration); // argument can be nct_mktime(args).d
 FILE*		nct_get_stream(const nct_var*);
@@ -437,8 +437,8 @@ nct_var* nct_load_partially_as(nct_var*, long start, long end, nc_type nctype);
 #define nct_loadg_as(set, name, type) nct_load_as(nct_get_var(set, name), type)
 #define nct_load_partially(var, start, end) nct_load_partially_as(var, start, end, (var)->dtype)
 static inline nct_var* nct_loadg(nct_set *set, const char *name) {
-    nct_var *var = nct_get_var(set, name);
-    return nct_load_as(var, var->dtype);
+	nct_var *var = nct_get_var(set, name);
+	return nct_load_as(var, var->dtype);
 }
 int	 nct_loadable(const nct_var*); // This check is always done in the load-function.
 
@@ -613,8 +613,8 @@ float*			nct_range_NC_FLOAT (float i0, float i1, float gap);
  * 	Other filetypes can be assumed based on the ending, e.g. lz4 compressed netcdf: file.nc.lz4
  */
 enum {
-    nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
-    nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=(1<<7)|nct_rcoord, nct_requalfiles=1<<8,
+	nct_ratt=0, nct_rlazy=1<<0, nct_rnoatt=1<<1, nct_rcoord=1<<2, nct_rkeep=1<<3,
+	nct_rmem=1<<4, nct_rkeepmem=1<<5, nct_rnetcdf=1<<6, nct_rcoordall=(1<<7)|nct_rcoord, nct_requalfiles=1<<8,
 };
 extern int nct_readflags;
 
@@ -646,21 +646,21 @@ nct_set* nct_read_ncf(const void* file, int readflags);
 nct_set* nct_read_ncf_gd(nct_set*, const void* file, int readflags);
 
 struct nct_mf_regex_args {
-    const char* restrict regex;
-    int regex_cflags;
-    char* restrict concat_args;
-    int nct_readflags;
-    void *strcmpfun_for_sorting;
-    int nmatch, return_groups;
-    regmatch_t **groups_out;
-    int dirnamelen_out, max_nfiles;
+	const char* restrict regex;
+	int regex_cflags;
+	char* restrict concat_args;
+	int nct_readflags;
+	void *strcmpfun_for_sorting;
+	int nmatch, return_groups;
+	regmatch_t **groups_out;
+	int dirnamelen_out, max_nfiles;
 };
 
 struct nct_mf_args {
-    char *names; // either char* or char**
-    int n, readflags;
-    char *concatdim;
-    char grouping[2];
+	char *names; // either char* or char**
+	int n, readflags;
+	char *concatdim;
+	char grouping[2];
 };
 
 /* Same as below but without readflags. */
@@ -672,10 +672,10 @@ nct_set* nct_read_mfnc_ptr_args(struct nct_mf_args*);
  *	nct_set* set = nct_read_mfnc_regex_opt("foo\\([1-9]*\\)\\.nc", .nct_readflags=nct_rcoord, .nmatch=2, .return_groups=1);
  */
 static inline nct_set* nct_read_mfnc_regex_opt_(struct nct_mf_regex_args args) {
-    return nct_read_mfnc_regex_args(&args);
+	return nct_read_mfnc_regex_args(&args);
 }
 static inline nct_set* nct_read_mfnc_ptr_opt_(struct nct_mf_args args) {
-    return nct_read_mfnc_ptr_args(&args);
+	return nct_read_mfnc_ptr_args(&args);
 }
 #define nct_read_mfnc_regex_opt(...) nct_read_mfnc_regex_opt_((struct nct_mf_regex_args){__VA_ARGS__});
 #define nct_read_mfnc_ptr_opt(...) nct_read_mfnc_ptr_opt_((struct nct_mf_args){__VA_ARGS__});
@@ -697,11 +697,11 @@ nct_var* nct_rename(nct_var*, char*, int freeable);
 nct_var* nct_rewind(nct_var* var); // back to start if nct_set_start has moved data pointer away from start
 
 /* Use with caution. These change the addresses of attributes.
-   *	nct_att* att = nct_get_varatt(var, "name");
-   *	nct_rm_varatt_name(var, "other_name");
-   *	// now att might point to another attribute than previously or even to a non-valid location.
-   *	assert(!strcmp(att->name, "name")); // this may fail
-   */
+ *	nct_att* att = nct_get_varatt(var, "name");
+ *	nct_rm_varatt_name(var, "other_name");
+ *	// now att might point to another attribute than previously or even to a non-valid location.
+ *	assert(!strcmp(att->name, "name")); // this may fail
+ */
 void nct_rm_varatt_num(nct_var* var, int attnum);
 void nct_rm_varatt_name(nct_var* var, const char* attname);
 
@@ -834,13 +834,13 @@ void	  nct__memcpy_double_as(nc_type nctype, void* dst, const double* src, long 
 char* nct__get_filenames(const char* restrict regex, int regex_cflags);
 char* nct__get_filenames_cmpfun(const char* restrict filename, int flags, void *strcmpfun_for_sorting);
 char* nct__get_filenames_deprecated(
-    const char* restrict regex,
-    int regex_cflags,
-    void *strcmpfun_for_sorting,
-    void (*fun)(const char* restrict, int, regmatch_t*, void*),
-    int size1,
-    int nmatch,
-    void** dest
+	const char* restrict regex,
+	int regex_cflags,
+	void *strcmpfun_for_sorting,
+	void (*fun)(const char* restrict, int, regmatch_t*, void*),
+	int size1,
+	int nmatch,
+	void** dest
 ) __attribute__((deprecated));
 
 char* nct__get_filenames_args(struct nct_mf_regex_args*);
@@ -855,7 +855,7 @@ int nct__read_timestr(const char *timestr, struct tm* timetm_out); // in: "2001-
    other is an optional array {oth_dest, oth_src} where oth_src will be sorted to oth_dest like src, if given.
    The same applies to more_data. */
 char* nct__sort_str(char* dest, const char* restrict src, int n, void* other[2], int size1other, void **more_data[2],
-    int (*strcmpfun)(const char*, const char*));
+	int (*strcmpfun)(const char*, const char*));
 
 /* To be passed as strcmpfun to nct__sort_str, nct_read_mfnc_regex, etc.,
    if filenames such as {file2, file10} should not be sorted alphabetically as with strcmp
