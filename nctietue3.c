@@ -69,7 +69,7 @@ static const char* const nct_typenames[] = { ALL_TYPES };
 #undef ONE_TYPE
 
 #define TIMEUNIT(arg) [nct_##arg] = #arg,
-static const char* const nct_timeunits[] = { TIMEUNITS };
+const char* const nct_timeunit_str[] = { TIMEUNITS };
 #undef TIMEUNIT
 
 #define ncfunk_open(name, access, idptr)			\
@@ -540,23 +540,23 @@ long long nct_convert_time_anyd(time_t time, nct_anyd units) {
 
 nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
 	nct_att* att = nct_get_varatt(var, "units");
-	if(!att)
+	if (!att)
 		return NULL;
-	if(!strcmp(att->value, units))
+	if (!strcmp(att->value, units))
 		return var; // already correct
 	time_t sec0, sec1;
 	nct_anyd time0_anyd = nct_timegm0(var, NULL);
-	if(time0_anyd.d < 0)
+	if (time0_anyd.d < 0)
 		return NULL;
-	sec0 = timegm(nct_gmtime(1, time0_anyd)) - timegm(nct_gmtime(0, time0_anyd)); // days -> 86400 etc.
-	if(att->freeable & nct_ref_content)
+	sec0 = nct_get_interval_ms(time0_anyd.d) / 1000; // days -> 86400 etc.
+	if (att->freeable & nct_ref_content)
 		free(att->value);
 
 	/* change the attribute */
 	att->value = strdup(units);
 	att->freeable |= nct_ref_content;
 	nct_anyd time1_anyd = nct_timegm0(var, NULL); // different result than time0_anyd, since att has been changed
-	if(time1_anyd.d < 0)
+	if (time1_anyd.d < 0)
 		return NULL;
 
 	if (!var->data)
@@ -1284,28 +1284,21 @@ nct_var* nct_copy_coord_with_interval(nct_var* coord, double gap, char* new_name
 	return new;
 }
 
-int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int* timeunit) {
-	char* units = nct_get_varatt_text(var, "units");
+/* "units" has form "hours since 2012-05-19" */
+int nct_interpret_timeunit(const char *units, struct tm* timetm, int* timeunit) {
 	*timeunit = -1; // will be overwritten on success
-	if(!units) {
-		nct_puterror("timevariable \"%s\" doesn't have attribute \"units\"\n", var->name);
-		return 1; }
+	if (!units) return 1;
+
+	/* hours, days, ... */
 	int ui;
+	for (ui=0; ui<nct_len_timeunits; ui++)
+		if (!strncmp(units, nct_timeunit_str[ui], strlen(nct_timeunit_str[ui])))
+			goto found;
+	ui = -1;
 
-	/* "units" has form "hours since 2012-05-19" */
-
-	for(ui=0; ui<nct_len_timeunits; ui++)
-		if(!strncmp(units, nct_timeunits[ui], strlen(nct_timeunits[ui])))
-			break;
-	if(ui == nct_len_timeunits) {
-		nct_puterror("unknown timeunit \"%s\"\n", units);
-		return 1; }
-
-	units += strlen(nct_timeunits[ui]);
-
-	if (nct__read_timestr(units, timetm))
-		return 1;
+found:
 	*timeunit = ui;
+	nct__read_timestr(units, timetm); // yyyy-mm-dd
 	return 0;
 }
 
@@ -1525,7 +1518,7 @@ struct tm* nct_localtime(long timevalue, nct_anyd time0) {
 }
 #undef TIMEUNIT
 
-nct_anyd nct_mktime(const nct_var* var, struct tm* timetm, nct_anyd* epoch, size_t ind) {
+nct_anyd nct_mktime(const nct_var* var, struct tm* timetm, const nct_anyd* epoch, size_t ind) {
 	struct tm timetm_buf;
 	int d;
 	if (!timetm)
@@ -1547,7 +1540,7 @@ nct_anyd nct_mktime0(const nct_var* var, struct tm* timetm) {
 	int ui;
 	if(!timetm)
 		timetm = &tm_;
-	if (nct_interpret_timeunit(var, timetm, &ui))
+	if (nct_interpret_timeunit(nct_get_varatt_text(var, "units"), timetm, &ui))
 		return (nct_anyd){.d=-1};
 	return (nct_anyd){.a.t=mktime(timetm), .d=ui};
 }
@@ -1594,7 +1587,7 @@ struct tm* nct_gmtime(long timevalue, nct_anyd time0) {
 }
 #undef TIMEUNIT
 
-nct_anyd nct_timegm(const nct_var* var, struct tm* timetm, nct_anyd* epoch, size_t ind) {
+nct_anyd nct_timegm(const nct_var* var, struct tm* timetm, const nct_anyd* epoch, size_t ind) {
 	struct tm timetm_buf;
 	int d;
 	if (!timetm)
@@ -1616,7 +1609,7 @@ nct_anyd nct_timegm0(const nct_var* var, struct tm* timetm) {
 	int ui;
 	if(!timetm)
 		timetm = &tm_;
-	if (nct_interpret_timeunit(var, timetm, &ui))
+	if (nct_interpret_timeunit(nct_get_varatt_text(var, "units"), timetm, &ui))
 		return (nct_anyd){.d=-1};
 	return (nct_anyd){.a.t=timegm(timetm), .d=ui};
 }
@@ -2645,21 +2638,23 @@ char *nct__get_filenames_args(struct nct_mf_regex_args* argsp) {
 int nct__read_timestr(const char *timestr, struct tm* timetm) {
 	int year, month, day, hms[3]={0}, len;
 	const char *str = timestr;
-	for(; *str; str++)
-		if('0' <= *str && *str <= '9') {
-			if(sscanf(str, "%d-%d-%d%n", &year, &month, &day, &len) != 3) {
-				nct_puterror("Could not read timestring (%s)", timestr);
-				return 1; }
-			break;
+	for (; *str; str++)
+		if ('0' <= *str && *str <= '9') {
+			if (sscanf(str, "%d-%d-%d%n", &year, &month, &day, &len) == 3)
+				goto success;
 		}
+	timetm->tm_mday = 0;
+	return 1;
+
+success:
 	str += len;
 
 	/* Optionally read hours, minutes, seconds. */
-	for(int i=0; i<3 && *str; i++) {
-		if(sscanf(str, "%2d", hms+i) != 1)
+	for (int i=0; i<3 && *str; i++) {
+		if (sscanf(str, "%2d", hms+i) != 1)
 			break;
 		str += 2;
-		while(*str && !('0' <= *str && *str <= '9')) str++;
+		while (*str && !('0' <= *str && *str <= '9')) str++;
 	}
 	*timetm = (struct tm){.tm_year=year-1900, .tm_mon=month-1, .tm_mday=day,
 		.tm_hour=hms[0], .tm_min=hms[1], .tm_sec=hms[2]};

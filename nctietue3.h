@@ -26,6 +26,7 @@ static const int __nct_version_in_executable = 0;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
+extern const char* const nct_timeunit_str[]; // nct_seconds -> "seconds", etc
 
 /* Use this to redirect error messages elsewhere than to stderr:
  *	char errormsg[512];
@@ -418,7 +419,7 @@ nct_var* nct_interpolate(nct_var* var, int idim, nct_var* tocoord, int inplace_i
    and unit enum nct_timeunit (days, seconds, etc.).
    Returns nonzero if interpreting fails, 0 on success.
    For form of the attribute, see nct_timegm0. */
-int nct_interpret_timeunit(const nct_var* var, struct tm* timetm, int *unit);
+int nct_interpret_timeunit(const char *units, struct tm* timetm, int *unit);
 
 int nct_link_data(nct_var*, nct_var*);
 int nct_link_stream(nct_var* dest, nct_var* src);
@@ -475,8 +476,8 @@ long nct_match_starttime(nct_var*, nct_var*);
    Returns the number of timesteps removed or negative on error. */
 long nct_match_endtime(nct_var*, nct_var*);
 
-nct_anyd nct_mktime(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
-nct_anyd nct_timegm(const nct_var* var, struct tm* tm, nct_anyd* epoch, size_t ind);
+nct_anyd nct_mktime(const nct_var* var, struct tm* tm, const nct_anyd* epoch, size_t ind);
+nct_anyd nct_timegm(const nct_var* var, struct tm* tm, const nct_anyd* epoch, size_t ind);
 
 short* nct_time_to_year(const nct_var *var) __attribute__((malloc));
 
