@@ -658,7 +658,8 @@ struct nct_mf_regex_args {
 };
 
 struct nct_mf_args {
-	char *names; // either char* or char**
+	char *names;
+	char **pnames;
 	int n, readflags;
 	char *concatdim;
 	char grouping[2];
@@ -678,8 +679,8 @@ static inline nct_set* nct_read_mfnc_regex_opt_(struct nct_mf_regex_args args) {
 static inline nct_set* nct_read_mfnc_ptr_opt_(struct nct_mf_args args) {
 	return nct_read_mfnc_ptr_args(&args);
 }
-#define nct_read_mfnc_regex_opt(...) nct_read_mfnc_regex_opt_((struct nct_mf_regex_args){__VA_ARGS__});
-#define nct_read_mfnc_ptr_opt(...) nct_read_mfnc_ptr_opt_((struct nct_mf_args){__VA_ARGS__});
+#define nct_read_mfnc_regex_opt(...) nct_read_mfnc_regex_opt_((struct nct_mf_regex_args){__VA_ARGS__})
+#define nct_read_mfnc_ptr_opt(...) nct_read_mfnc_ptr_opt_((struct nct_mf_args){__VA_ARGS__})
 
 /* filenames must be in the form of the result of nct__get_filenames. */
 nct_set* nct_read_mfnc_ptr(const char* filenames, int n, char* concatdim);

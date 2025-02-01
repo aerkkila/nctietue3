@@ -2128,22 +2128,28 @@ nct_set* nct_read_mfnc_ptrptr(char** filenames, int nfiles, char* concat_args) {
 	return nct_read_mfncf_ptrptr(filenames, nct_readflags, nfiles, concat_args);
 }
 
-nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char* concat_args) {
+char __attribute__((malloc))* nct__ptrptr_to_ptr(char **filenames, int *nfiles_) {
 	int len = 0;
-	int n = 0;
+	int n = 0, nfiles = *nfiles_ ? *nfiles_ : -1; // facilitates the while loop
 	while (n!=nfiles && filenames[n]) {
 		len += strlen(filenames[n]) + 1;
 		n++;
 	}
 	char* files = malloc(len+1);
 	char* ptr = files;
-	for(int i=0; i<n; i++) {
+	for (int i=0; i<n; i++) {
 		int a = strlen(filenames[i]) + 1;
 		memcpy(ptr, filenames[i], a);
 		ptr += a;
 	}
 	*ptr = 0;
-	nct_set* set = nct_read_mfncf_ptr(files, readflags, n, concat_args);
+	*nfiles_ = n;
+	return files;
+}
+
+nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char* concat_args) {
+	char *files = nct__ptrptr_to_ptr(filenames, &nfiles);
+	nct_set* set = nct_read_mfncf_ptr(files, readflags, nfiles, concat_args);
 	free(files);
 	return set;
 }
@@ -2151,10 +2157,13 @@ nct_set* nct_read_mfncf_ptrptr(char** filenames, int readflags, int nfiles, char
 nct_set* nct_read_mfnc_ptr_args(struct nct_mf_args *args) {
 	regmatch_t **match = NULL;
 	char *new = NULL;
-	if (args->grouping[0]) {
+	if (args->pnames)
+		args->names = new = nct__ptrptr_to_ptr(args->pnames, &args->n);
+	else if (args->grouping[0]) {
 		int ptrlen = 0;
 		int n = 0;
 		char *ptr = args->names;
+		if (args->n == 0) args->n = -1;
 		while (n != args->n && ptr) {
 			int len = strlen(ptr)+1;
 			ptrlen += len;
