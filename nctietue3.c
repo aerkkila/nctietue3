@@ -784,6 +784,11 @@ long long nct_diff_at_integer(nct_var* var, long ind) {
 }
 
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink) {
+	if (!var->data) {
+		nct_puterror("drop_vardim:ia älköön kutsuttako lataamattomalla muuttujalla\n");
+		nct_return_error(NULL);
+	}
+
 	size_t new_len = var->len / var->super->dims[var->dimids[dim]]->len;
 	if (shrink && !cannot_free(var)) {
 		var->data = realloc(var->data, new_len*nctypelen(var->dtype));
