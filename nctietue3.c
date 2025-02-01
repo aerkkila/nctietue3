@@ -350,8 +350,8 @@ static nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation)
    Coordinates will be loaded if aren't already.
    Variable will not be loaded, except if the first is loaded and the second is not.
    When unloaded sets are concatenated, they must not be freed before loading the data.
-   The following is hence an error:
- *	concat(set0, set1) // var n is not loaded
+   The following is an error:
+ *	concat(set0, set1)
  *	free(set1)
  *	load(set0->vars[n])
  */
@@ -490,7 +490,7 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		dimname = "-0";
 	if (dimname[0] == '-') {
 		int dimid0;
-		/* A number tells which vardim to concatenate along. (TODO:not) Defined based on the dimensions of the first var. */
+		/* A number tells which vardim to concatenate along. Defined based on the dimensions of the first var. */
 		if (sscanf(dimname+1, "%i", &dimid0) == 1) {
 			nct_foreach(vs0, v)
 				if (dimid0 < v->ndims) {
@@ -501,7 +501,6 @@ nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howman
 		/* Not a concatenation but useful. */
 		else if (!strncmp(dimname, "-v", 2)) {
 			nct_foreach(vs1, var1) {
-				// nct_load(var1); // not needed since var->fileinfo was added
 				/* -v:args tells how to rename the variables */
 				if (dimname[2] == ':') {
 					char *name = _makename_concat_v(var1, dimname+3);
@@ -636,10 +635,11 @@ static nct_var* find_corresponding_coord(nct_var *dim, nct_set *set) {
 
 nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	nct_var* var;
-	int n = src->ndims;
-	int dimids[n];
+	int ndims = src->ndims;
+	int dimids[ndims];
 	nct_var *dstdim;
-	for (int i=0; i<n; i++) {
+
+	for (int i=0; i<ndims; i++) {
 		nct_var* srcdim = src->super->dims[src->dimids[i]];
 		dimids[i] = nct_get_dimid(dest, srcdim->name);
 		/* Create the dimension if not present in dest. */
@@ -663,13 +663,15 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 			// else copied at the last line of this function
 		}
 	}
+
 	if (!nct_iscoord(src))
-		var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), n, dimids);
+		var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), ndims, dimids);
 	else
 		var = dstdim;
 	var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
 	var->ncid = src->ncid;
 	var->nfiledims = src->nfiledims;
+	var->rule[nct_r_concat] = src->rule[nct_r_concat];
 	memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
 	var->freeable_name = 1;
 	return _nct_copy_var_internal(var, src, link);
