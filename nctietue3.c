@@ -38,7 +38,7 @@ nct_error_action = nct_pass
 	stdout = tmp;				\
 } while(0)
 
-#define cannot_free(var) (var->not_freeable || (var->nusers && *var->nusers))
+#define cannot_free(var) (var->not_freeable & nct_ref_content || (var->nusers && *var->nusers))
 
 /* Use of this macro should be avoided.
  * Usage:
@@ -302,13 +302,8 @@ void nct_close_nc(int *ncid) {
 void nct_allocate_varmem(nct_var* var) {
 	if (var->capacity >= var->len)
 		return;
-	if cannot_free(var)
-		var->data = malloc(var->len*nctypelen(var->dtype));
-	else {
-		if (var->data)
-			free(var->data);
-		var->data = malloc(var->len*nctypelen(var->dtype));
-	}
+	nct_unlink_data(var);
+	var->data = malloc(var->len*nctypelen(var->dtype));
 	var->capacity = var->len;
 	if (var->data)
 		return;
@@ -1037,9 +1032,6 @@ static void _nct_free_var(nct_var* var) {
 	for(int i=0; i<var->natts; i++)
 		_nct_free_att(var->atts+i);
 	free(var->atts);
-	if (var->dtype == NC_STRING && !(var->not_freeable & nct_ref_string))
-		for (int i=0; i<var->len; i++)
-			free(((char**)var->data)[i]);
 	nct_unlink_data(var);
 	nct_unlink_stream(var);
 	var->capacity = 0;
@@ -2430,8 +2422,12 @@ void nct_set_stream(nct_var* var, FILE* f) {
 }
 
 void nct_unlink_data(nct_var* var) {
-	if (!cannot_free(var))
+	if (var->data && !cannot_free(var)) {
+		if (var->dtype == NC_STRING && !(var->not_freeable & nct_ref_string))
+			for (int i=0; i<var->endpos - var->startpos; i++)
+				free(((char**)var->data)[i]);
 		free(nct_rewind(var)->data);
+	}
 	if (var->nusers) {
 		if (!*var->nusers)
 			free(var->nusers);
