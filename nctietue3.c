@@ -9,6 +9,7 @@
 #include <regex.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/stat.h> // mkdir
 
 #define Min(a, b) ((a) < (b) ? a : (b))
 #define Max(a, b) ((a) > (b) ? a : (b))
@@ -169,6 +170,27 @@ void* nct_getfun_1[] = {
 #ifdef HAVE_LZ4
 #include "extra/lz4.c"
 #endif
+
+static int mkdir_file(const char *restrict name) {
+	int len = strlen(name);
+	char k1[len+1];
+	strcpy(k1, name);
+	char k2[len+2];
+	int pit;
+	if (name[0] == '/')
+		k2[0] = '/', pit = 1;
+	else
+		pit = 0;
+	char* str = strtok(k1, "/");
+	while (1) {
+		pit += sprintf(k2+pit, "%s/", str);
+		if (!(str=strtok(NULL, "/")))
+			break;
+		if (mkdir(k2, 0755) && errno != EEXIST)
+			return 1;
+	}
+	return 0;
+}
 
 static struct nct_fileinfo_t* _nct_link_fileinfo(struct nct_fileinfo_t*);
 
@@ -2457,6 +2479,7 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 	int ncid, id;
 	startpass;
 
+	mkdir_file(name);
 	ncfunk(nc_create, name, NC_NETCDF4|NC_CLOBBER, &ncid);
 	ncfunk(nc_set_fill, ncid, NC_NOFILL, NULL);
 	int n = src->ndims;
