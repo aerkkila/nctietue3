@@ -455,6 +455,7 @@ nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end);
 /* Use nct_load_instead. */
 nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_load instead.")));
 
+time_t     nct_get_time(long timevalue, nct_anyd *epoch);
 struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 

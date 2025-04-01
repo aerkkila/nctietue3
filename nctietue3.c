@@ -31,21 +31,21 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 #define anyrule(a, r) ((a)->rules & (r))
 #define rmrule(a, r)  ((a)->rules &= ~(1<<(r)))
 
-#define startpass			\
-	int __nct_err = nct_error_action;	\
-if (nct_error_action == nct_auto)	\
+#define startpass                     \
+	int __nct_err = nct_error_action; \
+if (nct_error_action == nct_auto)     \
 nct_error_action = nct_pass
 
 #define endpass nct_error_action = __nct_err
 
-#define print_varerror(var, indent)  do {	\
-	FILE* tmp = stdout;				\
-	stdout = nct_stderr? nct_stderr: stderr;	\
-	nct_print_var_meta(var, indent);		\
-	stdout = tmp;				\
+#define print_varerror(var, indent)  do {    \
+	FILE* tmp = stdout;                      \
+	stdout = nct_stderr? nct_stderr: stderr; \
+	nct_print_var_meta(var, indent);         \
+	stdout = tmp;                            \
 } while(0)
 
-#define cannot_free(var) (var->not_freeable & nct_ref_content || (var->nusers && *var->nusers))
+#define cannot_free(var) ((var)->not_freeable & nct_ref_content || ((var)->nusers && *(var)->nusers))
 
 /* Use of this macro should be avoided.
  * Usage:
@@ -53,17 +53,17 @@ nct_error_action = nct_pass
  *	ALL_TYPES;
  *      #undef ONE_TYPE
  */
-#define ALL_TYPES					\
-	ONE_TYPE(NC_BYTE, hhi, char)			\
-ONE_TYPE(NC_UBYTE, hhu, unsigned char)		\
-ONE_TYPE(NC_CHAR, c, char)			\
-ONE_TYPE(NC_SHORT, hi, short)		        \
-ONE_TYPE(NC_USHORT, hu, unsigned short)		\
-ONE_TYPE(NC_INT, i, int)			\
-ONE_TYPE(NC_UINT, u, unsigned)			\
-ONE_TYPE(NC_UINT64, llu, long long unsigned)	\
-ONE_TYPE(NC_INT64, lli, long long int)		\
-ONE_TYPE(NC_FLOAT, f, float)			\
+#define ALL_TYPES                            \
+	ONE_TYPE(NC_BYTE, hhi, char)             \
+ONE_TYPE(NC_UBYTE, hhu, unsigned char)       \
+ONE_TYPE(NC_CHAR, c, char)                   \
+ONE_TYPE(NC_SHORT, hi, short)                \
+ONE_TYPE(NC_USHORT, hu, unsigned short)      \
+ONE_TYPE(NC_INT, i, int)                     \
+ONE_TYPE(NC_UINT, u, unsigned)               \
+ONE_TYPE(NC_UINT64, llu, long long unsigned) \
+ONE_TYPE(NC_INT64, lli, long long int)       \
+ONE_TYPE(NC_FLOAT, f, float)                 \
 ONE_TYPE(NC_DOUBLE, lf, double)
 
 /* Used similarly than the macro above. */
@@ -956,6 +956,19 @@ long optimized nct_bsearch_reversed(const nct_var* var, double value, enum nct_b
 
 long optimized nct_search(const nct_var *var, double value, long offset, enum nct_beforeafter beforeafter) {
 	double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
+	if ((long)var->len-32 > offset) {
+		if (getfun(var, var->len-32) >= value)
+			while (getfun(var, offset+32) < value) offset += 32;
+		else
+			offset = var->len-32;
+	}
+	if ((long)var->len-8 > offset) {
+		if (getfun(var, var->len-8) >= value)
+			while (getfun(var, offset+8) < value) offset += 8;
+		else
+			offset = var->len-8;
+	}
+
 	for (; offset < var->len; offset++) {
 		double try = getfun(var, offset);
 		int test = (try == value) + (try >= value);
@@ -1618,33 +1631,14 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
 	return result;
 }
 
-/* In nct_gmtime, the argument (nct_anyd)time0 should be the return value from nct_gmtime0.
-   The right static function (nct_gmtime_$timestep) is called based on that. */
-static struct tm* nct_gmtime_milliseconds(long timevalue, time_t time0) {
-	time0 += timevalue/1000;
-	return gmtime(&time0);
+time_t nct_get_time(long timevalue, nct_anyd *epoch) {
+	return epoch->a.t + timevalue * ms_per_timeunit[epoch->d] / 1000;
 }
-static struct tm* nct_gmtime_seconds(long timevalue, time_t time0) {
-	time0 += timevalue;
-	return gmtime(&time0);
-}
-static struct tm* nct_gmtime_minutes(long timevalue, time_t time0) {
-	time0 += timevalue*60;
-	return gmtime(&time0);
-}
-static struct tm* nct_gmtime_hours(long timevalue, time_t time0) {
-	time0 += timevalue*3600;
-	return gmtime(&time0);
-}
-static struct tm* nct_gmtime_days(long timevalue, time_t time0) {
-	time0 += timevalue*86400;
-	return gmtime(&time0);
-}
-#define TIMEUNIT(arg) [nct_##arg]=nct_gmtime_##arg,
 
+#define TIMEUNIT(arg) [nct_##arg]=nct_gmtime_##arg,
 struct tm* nct_gmtime(long timevalue, nct_anyd time0) {
-	static struct tm*(*fun[])(long, time_t) = { TIMEUNITS }; // array of pointers to the static functions above
-	return fun[time0.d](timevalue, time0.a.t);               // a call to the right function: nct_gmtime_$timestep
+	time_t time = nct_get_time(timevalue, &time0);
+	return gmtime(&time);
 }
 #undef TIMEUNIT
 
