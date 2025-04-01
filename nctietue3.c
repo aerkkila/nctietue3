@@ -2268,13 +2268,14 @@ nct_set* nct_read_mfnc_regex_args(struct nct_mf_regex_args *args) {
 			str += strlen(str) + 1;
 		}
 	}
-	if (num == 0) {
+	if (num == 0 && args->zero_is_error) {
 		free(names);
 		nct_puterror("No files match \"%s\"\n", args->regex);
 		nct_return_error(NULL);
 	}
-
-	nct_set* s = nct_read_mfncf_ptr1(names, args->nct_readflags, num, args->concat_args, args->groups_out, args->dirnamelen_out);
+	nct_set *s = NULL;
+	if (num != 0)
+		s = nct_read_mfncf_ptr1(names, args->nct_readflags, num, args->concat_args, args->groups_out, args->dirnamelen_out);
 
 	if (!args->return_groups) {
 		free(args->groups_out); // Frees ptrptr. All pointers are in struct fileinfos.
