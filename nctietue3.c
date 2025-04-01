@@ -956,19 +956,6 @@ long optimized nct_bsearch_reversed(const nct_var* var, double value, enum nct_b
 
 long optimized nct_search(const nct_var *var, double value, long offset, enum nct_beforeafter beforeafter) {
 	double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
-	if ((long)var->len-32 > offset) {
-		if (getfun(var, var->len-32) >= value)
-			while (getfun(var, offset+32) < value) offset += 32;
-		else
-			offset = var->len-32;
-	}
-	if ((long)var->len-8 > offset) {
-		if (getfun(var, var->len-8) >= value)
-			while (getfun(var, offset+8) < value) offset += 8;
-		else
-			offset = var->len-8;
-	}
-
 	for (; offset < var->len; offset++) {
 		double try = getfun(var, offset);
 		int test = (try == value) + (try >= value);
