@@ -2516,12 +2516,8 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 		ncfunk(nc_put_var, ncid, id, v->data);
 		if (load) nct_unlink_data(v);
 	}
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 	if (what & _mutable)
-		/* an unsafe hack to discard the const qualifier */
-		memcpy(&src->ncid, &ncid, sizeof(src->ncid));
-#pragma GCC diagnostic pop
+		memcpy(&((nct_set*)(intptr_t)src)->ncid, &ncid, sizeof(src->ncid));
 	endpass;
 	return ncid;
 }
