@@ -2570,6 +2570,8 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 		if (what & _defonly)
 			continue;
 		if (load) nct_load(v);
+		if (v->deflate)
+			ncfunk(nc_def_var_deflate, ncid, id, 1, 1, v->deflate);
 		if (nct_before_ncputvar)
 			nct_before_ncputvar(v, ncid, id);
 		ncfunk(nc_put_var, ncid, id, v->data);
