@@ -357,12 +357,16 @@ enum nct_beforeafter {nct_lt=-2, nct_leq, nct_geq, nct_gt};
  *	-1 (nct_leq): var->data[ret] ≤ value
  *	-2 (nct_lt) : var->data[ret] < value
  * Sets nct_register to 0 (1) if the exact value was (wasn't) found.
- * Data in var must be sorted.
+ * Data in var must be sorted in bsearch.
  */
 long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter);
 long nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter beforeafter);
 long nct_bsearch_time(const nct_var* timevar, time_t time, enum nct_beforeafter beforeafter);
 long nct_bsearch_time_str(const nct_var* timevar, const char *timestr, enum nct_beforeafter beforeafter);
+/* linear search */
+long nct_search(const nct_var *var, double value, long offset, enum nct_beforeafter beforeafter);
+long nct_search_time(const nct_var* timevar, time_t time, long offset, enum nct_beforeafter beforeafter);
+long nct_search_time_str(const nct_var* timevar, const char *timestr, long offset, enum nct_beforeafter beforeafter);
 
 nct_var* nct_firstvar(const nct_set*);
 nct_var* nct_nextvar(const nct_var*);

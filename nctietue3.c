@@ -11,6 +11,12 @@
 #include <unistd.h>
 #include <sys/stat.h> // mkdir
 
+#define DEBUG 1
+#if DEBUG <= 1
+#define optimized __attribute__((optimize("-Ofast")))
+#else
+#define optimized
+#endif
 #define Min(a, b) ((a) < (b) ? a : (b))
 #define Max(a, b) ((a) > (b) ? a : (b))
 
@@ -654,7 +660,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	nct_var* var;
 	int ndims = src->ndims;
 	int dimids[ndims];
-	nct_var *dstdim;
+	nct_var *dstdim = NULL;
 
 	for (int i=0; i<ndims; i++) {
 		nct_var* srcdim = src->super->dims[src->dimids[i]];
@@ -894,7 +900,7 @@ next:;
 	nct_return_error(NULL);
 }
 
-long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
+long optimized nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
 	double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
 	size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
 	if (var->endpos)
@@ -921,7 +927,7 @@ long nct_bsearch(const nct_var* var, double value, enum nct_beforeafter beforeaf
 	return ret;
 }
 
-long nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
+long optimized nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter beforeafter) {
 	double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
 	size_t sem[] = {0, var->len-1, (var->len)/2}; // start, end, mid
 	if (var->endpos)
@@ -948,6 +954,26 @@ long nct_bsearch_reversed(const nct_var* var, double value, enum nct_beforeafter
 	return ret;
 }
 
+long optimized nct_search(const nct_var *var, double value, long offset, enum nct_beforeafter beforeafter) {
+	double (*getfun)(const nct_var*, size_t) = var->data ? nct_get_floating : nct_getl_floating;
+	for (; offset < var->len; offset++) {
+		double try = getfun(var, offset);
+		int test = (try == value) + (try >= value);
+		switch (test) {
+			case 1:
+				if (beforeafter != nct_gt)
+					return offset - (beforeafter == nct_lt);
+				continue;
+			case 2:
+				return offset - (beforeafter <= nct_leq);
+			case 0:
+				continue;
+			default: __builtin_unreachable();
+		}
+	}
+	return offset - (beforeafter <= nct_leq);
+}
+
 long nct_bsearch_time(const nct_var* var, time_t time, enum nct_beforeafter beforeafter) {
 	struct tm tm0;
 	nct_anyd epoch = nct_timegm0(var, &tm0);
@@ -960,6 +986,20 @@ long nct_bsearch_time_str(const nct_var* dim, const char *timestr, enum nct_befo
 	struct tm tm;
 	nct__read_timestr(timestr, &tm);
 	return nct_bsearch_time(dim, timegm(&tm), beforeafter);
+}
+
+long nct_search_time(const nct_var* var, time_t time, long offset, enum nct_beforeafter beforeafter) {
+	struct tm tm0;
+	nct_anyd epoch = nct_timegm0(var, &tm0);
+	long diff_s = time - epoch.a.t;
+	double tofind = diff_s * 1000 / nct_get_interval_ms(epoch.d);
+	return nct_search(var, tofind, offset, beforeafter);
+}
+
+long nct_search_time_str(const nct_var* dim, const char *timestr, long offset, enum nct_beforeafter beforeafter) {
+	struct tm tm;
+	nct__read_timestr(timestr, &tm);
+	return nct_search_time(dim, timegm(&tm), offset, beforeafter);
 }
 
 nct_var* nct_firstvar(const nct_set* set) {
@@ -1739,9 +1779,27 @@ long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
 
 	int smaller = time[1].a.t < time[0].a.t;
 	long diff_ms = (time[!smaller].a.t - time[smaller].a.t) * 1000;
-	long diff_n = diff_ms  / ms_per_timeunit[time[!smaller].d];
-	nct_shorten_length(vars[!smaller], nct_bsearch(vars[!smaller], nct_get_floating_last(vars[!smaller], 1) - diff_n, 0) + 1);
-	return diff_n;
+	long diff_units = diff_ms  / ms_per_timeunit[time[!smaller].d];
+	nct_shorten_length(vars[!smaller], nct_bsearch(vars[!smaller], nct_get_floating_last(vars[!smaller], 1) - diff_units, nct_geq) + 1);
+	return diff_units;
+}
+
+long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
+	nct_var* vars[] = {timevar0, timevar1};
+	nct_anyd time[2];
+
+	for(int i=0; i<2; i++) {
+		time[i] = nct_timegm(vars[i], NULL, NULL, 0);
+		if (time[i].d < 0)
+			nct_return_error(-1);
+	}
+
+	int earlier = time[1].a.t < time[0].a.t;
+	long diff_ms = (time[!earlier].a.t - time[earlier].a.t) * 1000;
+	long diff_units = diff_ms  / ms_per_timeunit[time[earlier].d];
+	long istart = nct_bsearch(vars[earlier], nct_get_floating(vars[earlier], 0) + diff_units, nct_leq);
+	nct_set_rstart(vars[earlier], istart);
+	return diff_units;
 }
 
 static const int stack_size1 = 8;
@@ -1971,8 +2029,9 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
 	}
 	else if (flags & nct_rnetcdf) {
 		fileinfo = calloc(1, sizeof(struct nct_fileinfo_t));
-		fileinfo->fileinfo.name = strdup(vfile);
-		ncfunk_open(fileinfo->fileinfo.name, NC_NOWRITE, &ncid);
+		struct nct_fileinfo_t *info = &fileinfo->fileinfo; // to prevent warning -Warray-bounds
+		info->name = strdup(vfile);
+		ncfunk_open(info->name, NC_NOWRITE, &ncid);
 	}
 	else // If another filetype isn't recognized, calls this function again with flags|nct_rnetcdf.
 		return _read_unknown_format(dest, vfile, flags);

@@ -18,10 +18,10 @@ endif
 all: libnctietue3.so
 
 nctietue3.o: nctietue3.c nctietue3.h internals.h load_data.h transpose.c config.mk $(extra_dependencies) Makefile
-	$(CC) $(CFLAGS) $(macros) -O0 -o $@ -c $<
+	$(CC) $(CFLAGS) $(macros) -o $@ -c $<
 
 functions.o: functions.c config.mk nctietue3.h
-	$(CC) $(CFLAGS) -o $@ -c $<
+	$(CC) $(CFLAGS) -O3 -o $@ -c $<
 
 libnctietue3.so: nctietue3.o functions.o
 	$(CC) -o $@ -shared $^ $(libraries)
