@@ -65,10 +65,10 @@ void* nct__lz4_decompress(const void* compressed, size_t size_compressed, size_t
 	return uncompressed;
 
 decompress_error: __attribute__((cold));
-				  nct_puterror("LZ4F_decompress failed: %s\n", LZ4F_getErrorName(result));
-				  LZ4F_freeDecompressionContext(dctx);
-				  free(uncompressed);
-				  nct_return_error(NULL);
+	nct_puterror("LZ4F_decompress failed: %s\n", LZ4F_getErrorName(result));
+	LZ4F_freeDecompressionContext(dctx);
+	free(uncompressed);
+	nct_return_error(NULL);
 }
 
 void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed) {
@@ -82,7 +82,7 @@ void* nct__lz4_getcontent(const char* filename, size_t* size_uncompressed) {
 		nct_return_error(NULL);}
 	void* compressed = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	close(fd);
-	if (!compressed) {
+	if (compressed == MAP_FAILED) {
 		nct_puterror("mmap %s, fd = %i: %s\n", filename, fd, strerror(errno));
 		nct_return_error(NULL);}
 
