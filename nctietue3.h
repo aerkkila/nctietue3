@@ -22,7 +22,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 1;
+static const int __nct_version_in_executable = 2;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -456,7 +456,7 @@ nct_var* nct_perhaps_load_partially(nct_var* var, long start, long end);
 nct_var* nct_load_stream(nct_var*, size_t) __attribute__((deprecated ("Use nct_load instead.")));
 
 time_t     nct_get_time(long timevalue, nct_anyd *epoch);
-struct tm* nct_gmtime(long timevalue, nct_anyd epoch);
+struct tm* nct_gmtime(long timevalue, nct_anyd epoch, struct tm *out);
 struct tm* nct_localtime(long timevalue, nct_anyd epoch);
 
 /* Calls nct_set_rstart (nct_set_length)

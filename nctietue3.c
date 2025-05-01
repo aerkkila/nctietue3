@@ -588,7 +588,8 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units) {
 			nct_put_interval(var, 0, 1);
 		}
 
-	sec1 = timegm(nct_gmtime(1, time1_anyd)) - timegm(nct_gmtime(0, time1_anyd)); // days -> 86400 etc.
+	struct tm tm;
+	sec1 = timegm(nct_gmtime(1, time1_anyd, &tm)) - timegm(nct_gmtime(0, time1_anyd, &tm)); // days -> 86400 etc.
 	int len = var->len;
 	switch (var->dtype) {
 		case NC_FLOAT:
@@ -1623,9 +1624,9 @@ time_t nct_get_time(long timevalue, nct_anyd *epoch) {
 }
 
 #define TIMEUNIT(arg) [nct_##arg]=nct_gmtime_##arg,
-struct tm* nct_gmtime(long timevalue, nct_anyd time0) {
+struct tm* nct_gmtime(long timevalue, nct_anyd time0, struct tm *tm) {
 	time_t time = nct_get_time(timevalue, &time0);
-	return gmtime(&time);
+	return gmtime_r(&time, tm);
 }
 #undef TIMEUNIT
 
@@ -1636,11 +1637,11 @@ nct_anyd nct_timegm(const nct_var* var, struct tm* timetm, const nct_anyd* epoch
 		timetm = &timetm_buf;
 	if (!epoch) {
 		nct_anyd any = nct_timegm0(var, timetm);
-		*timetm = *nct_gmtime(nct_get_integer(var, ind), any);
+		nct_gmtime(nct_get_integer(var, ind), any, timetm);
 		d = any.d;
 	}
 	else {
-		*timetm = *nct_gmtime(nct_get_integer(var, ind), *epoch);
+		nct_gmtime(nct_get_integer(var, ind), *epoch, timetm);
 		d = epoch->d;
 	}
 	return (nct_anyd){.a.t=timegm(timetm), .d=d};
