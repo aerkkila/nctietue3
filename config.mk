@@ -8,8 +8,9 @@ have_proj = 1
 have_lz4 = 1
 
 CFLAGS = -Wall -g -fPIC
-CC = gcc
 
-prefix = /usr/local
+ifndef prefix
+	prefix = /usr/local
+endif
 includedir = ${prefix}/include
 libdir = ${prefix}/lib

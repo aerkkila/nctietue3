@@ -39,3 +39,4 @@ install: libnctietue3.so
 
 uninstall:
 	rm -f $(includedir)/nctietue3.h $(includedir)/nctproj.h $(libdir)/libnctietue3.so
+	rmdir -p --ignore-fail-on-non-empty $(includedir) $(libdir)
