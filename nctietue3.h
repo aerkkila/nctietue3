@@ -22,7 +22,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 2;
+static const int __nct_version_in_executable = 3;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -216,7 +216,8 @@ struct nct_var {
 	long	startpos, endpos; // if virtual file is loaded partially, from which to which index
 	long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
 	nc_type	dtype;
-	int		not_freeable;
+	char	not_freeable,
+			not_to_write; // nct_create_nc and similar functions will define the variable but not call nc_put_var
 	int 	*nusers, *nusers_stream; // the first user is not counted
 	void*	data;
 	unsigned	rules; // a bitmask of rules which are in use
@@ -295,7 +296,9 @@ nct_var* nct_convert_timeunits(nct_var* var, const char* units);
 
 /* Like nct_write_nc but returns ncid without closing it.
    src->ncid and all src->var->ncid are unchanged
-   because they may be used for reading from an existing file. */
+   because they may be used for reading from an existing file.
+   Data is not written from variable if it is marked with not_to_write,
+   or data is NULL and cannot be loaded. */
 int nct_create_nc(const nct_set* src, const char* name);
 /* Like nct_create_nc but writes only coordinates and not other variables. */
 int nct_createcoords_nc(const nct_set* src, const char* name);

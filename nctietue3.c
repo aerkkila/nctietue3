@@ -2532,13 +2532,7 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 		nct_var* v = src->vars[i];
 		if (what & _createcoords && !nct_iscoord(v))
 			continue;
-		int load = 0;
-		if (!v->data) {
-			if (nct_loadable(v))
-				load = 1;
-			else if (!(what & _defonly))
-				continue;
-		}
+		int load = !v->data && nct_loadable(v);
 		ncfunk(nc_def_var, ncid, v->name, v->dtype, v->ndims, v->dimids, &id);
 		if (what & _mutable)
 			v->ncid = id;
@@ -2551,7 +2545,7 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 			else
 				ncfunk(nc_put_att, ncid, i, v->atts[a].name, v->atts[a].dtype,
 					v->atts[a].len, v->atts[a].value);
-		if (what & _defonly)
+		if (what & _defonly || v->not_to_write || (!v->data && !load))
 			continue;
 		if (load) nct_load(v);
 		if (nct_before_ncputvar)
