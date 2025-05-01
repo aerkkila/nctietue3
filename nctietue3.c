@@ -2541,6 +2541,8 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 		ncfunk(nc_def_var, ncid, v->name, v->dtype, v->ndims, v->dimids, &id);
 		if (what & _mutable)
 			v->ncid = id;
+		if (v->deflate)
+			ncfunk(nc_def_var_deflate, ncid, id, 1, 1, v->deflate);
 		for (int a=0; a<v->natts; a++)
 			if (v->atts[a].dtype == NC_CHAR)
 				ncfunk(nc_put_att_text, ncid, i, v->atts[a].name,
@@ -2551,8 +2553,6 @@ static int _nct_create_nc(const nct_set* src, const char* name, unsigned what) {
 		if (what & _defonly)
 			continue;
 		if (load) nct_load(v);
-		if (v->deflate)
-			ncfunk(nc_def_var_deflate, ncid, id, 1, 1, v->deflate);
 		if (nct_before_ncputvar)
 			nct_before_ncputvar(v, ncid, id);
 		ncfunk(nc_put_var, ncid, id, v->data);
