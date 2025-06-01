@@ -385,8 +385,8 @@ void		nct_get_coords_from_ind(const nct_var* var, size_t* out, size_t ind); // c
 size_t		nct_get_ind_from_coords(const nct_var* var, const size_t* coord);
 nct_att*	nct_get_varatt(const nct_var* var, const char* name);
 char*		nct_get_varatt_text(const nct_var*, const char*);
-double		nct_get_varatt_floating(const nct_var *var, const char *name, int ind);
-long long	nct_get_varatt_integer(const nct_var *var, const char *name, int ind);
+double		nct_get_varatt_floating(const nct_var *var, const char *name, int ind, double on_error);
+long long	nct_get_varatt_integer(const nct_var *var, const char *name, int ind, long long on_error);
 nct_var*	nct_get_dim(const nct_set* set, const char* name);
 nct_var*	nct_get_var(const nct_set* set, const char* name);
 nct_var*	nct_get_vardim(const nct_var* var, int num);

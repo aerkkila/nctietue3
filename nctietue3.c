@@ -1223,7 +1223,7 @@ nct_var* nct_get_dim(const nct_set* set, const char* name) {
 
 nct_var* nct_get_var(const nct_set* set, const char* name) {
 	int nvars = set->nvars;
-	for(int i=0; i<nvars; i++)
+	for (int i=0; i<nvars; i++)
 		if (!strcmp(name, set->vars[i]->name)) {
 			nct_register = i;
 			return set->vars[i];
@@ -1233,37 +1233,31 @@ nct_var* nct_get_var(const nct_set* set, const char* name) {
 
 nct_att* nct_get_varatt(const nct_var* var, const char* name) {
 	int natts = var->natts;
-	for(int i=0; i<natts; i++)
-		if(!strcmp(var->atts[i].name, name)) {
+	for (int i=0; i<natts; i++)
+		if (!strcmp(var->atts[i].name, name)) {
 			nct_register = i;
 			return var->atts+i;
 		}
 	return NULL;
 }
 
-double nct_get_varatt_floating(const nct_var *var, const char *name, int ind) {
+double nct_get_varatt_floating(const nct_var *var, const char *name, int ind, double on_error) {
 	nct_att *att = nct_get_varatt(var, name);
-	if (!att) {
-		nct_puterror("attribute %s not found:", name);
-		print_varerror(var, "    ");
-		nct_return_error(NAN);
-	}
+	if (!att)
+		return on_error;
 	return nct_get_floating_from(att->dtype, att->value, ind);
 }
 
-long long nct_get_varatt_integer(const nct_var *var, const char *name, int ind) {
+long long nct_get_varatt_integer(const nct_var *var, const char *name, int ind, long long on_error) {
 	nct_att *att = nct_get_varatt(var, name);
-	if (!att) {
-		nct_puterror("attribute %s not found:\n", name);
-		print_varerror(var, "    ");
-		nct_return_error(0);
-	}
+	if (!att)
+		return on_error;
 	return nct_get_integer_from(att->dtype, att->value, ind);
 }
 
 char* nct_get_varatt_text(const nct_var* var, const char* name) {
 	int natts = var->natts;
-	for(int i=0; i<natts; i++)
+	for (int i=0; i<natts; i++)
 		if (!strcmp(var->atts[i].name, name))
 			return var->atts[i].value;
 	return NULL;
@@ -1274,7 +1268,7 @@ nct_var* nct_get_vardim(const nct_var* var, int num) {
 }
 
 int nct_get_vardimid(const nct_var* restrict var, int dimid) {
-	for(int i=0; i<var->ndims; i++)
+	for (int i=0; i<var->ndims; i++)
 		if (var->dimids[i] == dimid)
 			return i;
 	return -1;
@@ -1815,7 +1809,7 @@ long nct_match_endtime(nct_var* timevar0, nct_var* timevar1) {
 	nct_var* vars[] = {timevar0, timevar1};
 	nct_anyd time[2];
 
-	for(int i=0; i<2; i++) {
+	for (int i=0; i<2; i++) {
 		time[i] = nct_timegm(vars[i], NULL, NULL, vars[i]->len-1);
 		if (time[i].d < 0)
 			nct_return_error(-1);
@@ -1832,7 +1826,7 @@ long nct_match_starttime(nct_var* timevar0, nct_var* timevar1) {
 	nct_var* vars[] = {timevar0, timevar1};
 	nct_anyd time[2];
 
-	for(int i=0; i<2; i++) {
+	for (int i=0; i<2; i++) {
 		time[i] = nct_timegm(vars[i], NULL, NULL, 0);
 		if (time[i].d < 0)
 			nct_return_error(-1);
@@ -1863,7 +1857,7 @@ void nct_print_att(nct_att* att, const char* indent) {
 		return;
 	}
 	int size1 = nctypelen(att->dtype);
-	for(int i=0; i<att->len-1; i++) {
+	for (int i=0; i<att->len-1; i++) {
 		nct_print_datum(att->dtype, att->value+i*size1);
 		printf(", ");
 	}
@@ -1886,9 +1880,9 @@ void nct_print_var_meta(const nct_var* var, const char* indent) {
 		indent, nct_type_color, nct_typenames[var->dtype],
 		nct_varname_color, var->name, (long)var->len, nct_default_color,
 		indent, var->ndims);
-	for(int i=0; i<var->ndims; i++) {
+	for (int i=0; i<var->ndims; i++) {
 		nct_var* dim = var->super->dims[var->dimids[i]];
-		printf("%s(%zu), ", dim->name, dim->len);
+		printf("%s(%li), ", dim->name, (long)dim->len);
 	}
 	printf(")\n");
 }
@@ -2472,37 +2466,45 @@ nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter)
 	return nct_set_length(dim, ind);
 }
 
-void _set_length_concatlist(nct_var *var, nct_var *dim, long length) {
-	if (!var->concatlist.super)
+void _set_length_concatlist(nct_var *var, nct_var *dim, int vardimid, long length) {
+	if (var->concatlist.mem == 0)
 		return;
-	nct_var *dim1 = nct_get_dim(var->concatlist.super, dim->name);
-	if (!dim1)
+
+	if (vardimid > 0) {
+		/* concatenated in parallel */
+		nct_set *super1 = var->concatlist.super;
+		int ndims = super1->ndims;
+		char used[ndims];
+		memset(used, 0, sizeof(used));
+		nct_foreach(super1, var1) {
+			int vardimid1 = vardimid - (var->ndims - var1->ndims);
+			int dimid = var1->dimids[vardimid1];
+			if (!used[dimid])
+				nct_set_length(super1->dims[dimid], length);
+			used[dimid] = 1;
+		}
 		return;
-	if (dim1->len != -1)
-		/* not the first dimension, concatenated in parallel */
-		nct_set_length(dim1, length);
-	else {
-		/* the first dimension, concatenated in series */
-		long wantedpos = length + dim->startdiff;
-		if (!var->concatlist.mem)
-			return;
-		if (var->concatlist.coords[0][0] >= wantedpos) {
-			var->concatlist.n = 0;
+	}
+
+	/* concatenated in series */
+	long wantedpos = length + dim->startdiff;
+	if (var->concatlist.coords[0][0] >= wantedpos) {
+		var->concatlist.n = 0;
+		return;
+	}
+	for (int i=0; i<var->concatlist.mem; i++)
+		if (var->concatlist.coords[i][1] + var->concatlist.shortening[i] >= wantedpos) {
+			long *startend = var->concatlist.coords[i];
+			long newlen = wantedpos - startend[0];
+			int diff = wantedpos - startend[1];
+			var->concatlist.shortening[i] -= diff;
+			startend[1] = startend[0] + newlen;
+			var->concatlist.n = i+1;
+			nct_set_length_unlimited_dim(var->concatlist.list[i], newlen);
 			return;
 		}
-		for (int i=0; i<var->concatlist.mem; i++)
-			if (var->concatlist.coords[i][1] + var->concatlist.shortening[i] >= wantedpos) {
-				long *startend = var->concatlist.coords[i];
-				long newlen = wantedpos - startend[0];
-				int diff = wantedpos - startend[1];
-				var->concatlist.shortening[i] -= diff;
-				startend[1] = startend[0] + newlen;
-				var->concatlist.n = i+1;
-				nct_set_length_unlimited_dim(var->concatlist.list[i], newlen);
-				return;
-			}
-		nct_puterror("could not set length %zu\n", length);
-	}
+	nct_puterror("could not set length %zu\n", length);
+	nct_other_error;
 }
 
 nct_var* nct_set_length(nct_var* dim, size_t length) {
@@ -2510,10 +2512,13 @@ nct_var* nct_set_length(nct_var* dim, size_t length) {
 	if (dim->len != -1)
 		dim->len = length;
 	nct_foreach(dim->super, var) {
+		int vardimid = nct_get_vardimid(var, nct_dimid(dim));
+		if (vardimid < 0)
+			continue;
 		if (dim->len == -1)
 			var->len_unlimited = length;
 		var->len = nct_get_len_from(var, 0);
-		_set_length_concatlist(var, dim, length);
+		_set_length_concatlist(var, dim, vardimid, length);
 	}
 	return dim;
 }
@@ -2523,7 +2528,7 @@ nct_var* nct_set_length_unlimited_dim(nct_var *var, long len) {
 	var->len_unlimited = len;
 	var->enddiff_unlimited += diff;
 	var->len = nct_get_len_from(var, 0);
-	_set_length_concatlist(var, nct_get_vardim(var, 0), len);
+	_set_length_concatlist(var, nct_get_vardim(var, 0), 0, len);
 	return var;
 }
 
@@ -2541,16 +2546,27 @@ nct_var* nct_set_rstart(nct_var* dim, long change) {
 	if (dim->len != -1)
 		dim->len -= change;
 	nct_foreach(dim->super, var) {
+		int vardimid = nct_get_vardimid(var, nct_dimid(dim));
+		if (vardimid < 0)
+			continue;
 		if (dim->len == -1)
 			var->len_unlimited -= change;
 		var->len = nct_get_len_from(var, 0);
-		if (var->concatlist.super) {
-			nct_var *dim1 = nct_get_dim(var->concatlist.super, dim->name);
-			if (!dim1)
-				continue;
-			if (dim1->len != -1)
-				nct_set_rstart(dim1, change); // concatenated in parallel
-			/* else concatenated is series, startdiff comes from concatlist.super */
+		if (vardimid == 0)
+			continue; // concatenated in series
+		/* concatenated in parallel */
+		if (var->concatlist.n) {
+			nct_set *super1 = var->concatlist.super;
+			int ndims = super1->ndims;
+			char used[ndims];
+			memset(used, 0, sizeof(used));
+			nct_foreach(super1, var1) {
+				int vardimid1 = vardimid - (var->ndims - var1->ndims);
+				int dimid = var1->dimids[vardimid1];
+				if (!used[dimid])
+					nct_set_rstart(super1->dims[dimid], change);
+				used[dimid] = 1;
+			}
 		}
 	}
 	return dim;

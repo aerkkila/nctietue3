@@ -241,6 +241,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	var1->data = info->data;
 	var1->capacity = len1;
 	var1->not_freeable = 1;
+	var1->dtype = var->dtype; // var->dtype may have been manually changed after nct_set_concat
 	int nread;
 	long start1 = info->start - relstart_var1;
 	_nct_load_partially_as(var1, start1, start1+len1, var->dtype, &nread);
