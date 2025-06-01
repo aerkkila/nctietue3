@@ -238,16 +238,16 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 	nct_var* var = set->vars[set->nvars] = malloc(sizeof(nct_var));
 	*var = (nct_var) {
 		.super       = set,
-			.id_var      = nct_varid_(set->nvars),
-			.ncid        = -1,
-			.name        = name,
-			.ndims       = ndims,
-			.dimcapacity = ndims+1,
-			.dimids      = malloc((ndims+1)*sizeof(int)),
-			.dtype       = dtype,
-			.data        = src,
+		.id_var      = nct_varid_(set->nvars),
+		.ncid        = -1,
+		.name        = name,
+		.ndims       = ndims,
+		.dimcapacity = ndims+1,
+		.dimids      = malloc((ndims+1)*sizeof(int)),
+		.dtype       = dtype,
+		.data        = src,
 	};
-	if(!var->dimids)
+	if (!var->dimids)
 		goto failed;
 	memcpy(var->dimids, dimids, ndims*sizeof(int));
 	set->nvars++;
@@ -760,21 +760,22 @@ nct_var* nct_dim2coord(nct_var* var, void* src, nc_type dtype) {
 	int dimid = var->id_dim;
 	*var = (nct_var){
 		.super		= var->super,
-			.id_var		= nct_varid_(set->nvars),
-			.id_dim		= dimid,
-			.ncid		= var->ncid,
-			.name		= var->name,
-			.freeable_name	= var->freeable_name,
-			.ndims		= 1,
-			.dimcapacity	= 1,
-			.dimids		= malloc(1*sizeof(int)),
-			.natts		= var->natts,
-			.attcapacity	= var->attcapacity,
-			.atts		= var->atts,
-			.len		= var->len,
-			.capacity	= src? var->len: 0,
-			.dtype		= dtype,
-			.data		= src,
+		.id_var		= nct_varid_(set->nvars),
+		.id_dim		= dimid,
+		.ncid		= var->ncid,
+		.name		= var->name,
+		.freeable_name	= var->freeable_name,
+		.ndims		= 1,
+		.dimcapacity	= 1,
+		.dimids		= malloc(1*sizeof(int)),
+		.natts		= var->natts,
+		.attcapacity	= var->attcapacity,
+		.atts		= var->atts,
+		.len		= var->len,
+		.capacity	= src ? var->len : 0,
+		.endpos     = src ? var->len : 0,
+		.dtype		= dtype,
+		.data		= src,
 	};
 	if (!var->dimids)
 		goto failed;
@@ -1792,7 +1793,7 @@ int nct_stack_not_empty(const nct_var* var) {
 
 nct_var* nct_perhaps_load_partially_as(nct_var* var, long start, long end, nc_type nctype) {
 	if (var->startpos > start || var->endpos < end)
-		nct_load_partially_as(var, start, end, nctype);
+		return nct_load_partially_as(var, start, end, nctype);
 	return var;
 }
 
@@ -1865,7 +1866,7 @@ void nct_print_dim(nct_var* var, const char* indent) {
 	printf("%s%s%s %s%s(%zu)%s:\n",
 		indent, nct_type_color, nct_typenames[var->dtype],
 		nct_dimname_color, var->name, var->len, nct_default_color);
-	if(nct_iscoord(var)) {
+	if (nct_iscoord(var)) {
 		printf("%s  [", indent);
 		nct_print_data(var);
 		puts("]");
@@ -1879,7 +1880,7 @@ static void _nct_print(nct_set* set, int nodata) {
 		printf("%s:\n", filename);
 	printf("%s%i variables, %i dimensions%s\n", nct_varset_color, set->nvars, set->ndims, nct_default_color);
 	int n = set->ndims;
-	for(int i=0; i<n; i++) {
+	for (int i=0; i<n; i++) {
 		putchar('\n');
 		nct_print_dim(set->dims[i], "  ");
 	}

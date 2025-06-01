@@ -76,17 +76,20 @@ static void _printhelper_@nctype(@ctype* data, long i, long len) {
 void nct_print_data_@nctype(nct_var* var) {
 	size_t len = var->len;
 	if (len <= 17) {
-		nct_perhaps_load_partially(var, 0, len);
+		if (!nct_perhaps_load_partially(var, 0, len))
+			return;
 		_printhelper_@nctype(var->data, 0, len);
 		return; }
 
 	int old = nct_readflags;
 	nct_readflags &= nct_rkeep;
-	nct_perhaps_load_partially(var, 0, 8);
+	if (!nct_perhaps_load_partially(var, 0, 8))
+		return;
 	_printhelper_@nctype(var->data, 0, 8);
 	printf(" ..., ");
 	nct_readflags = old;
-	nct_perhaps_load_partially(var, len-8, len);
+	if (!nct_perhaps_load_partially(var, len-8, len))
+		return;
 	_printhelper_@nctype(var->data, len-8-var->startpos, len-var->startpos);
 }
 @end_stringalso
