@@ -1678,7 +1678,7 @@ nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm) {
 	return result;
 }
 
-time_t nct_get_time(long timevalue, nct_anyd *epoch) {
+time_t nct_get_time(long timevalue, const nct_anyd *epoch) {
 	return epoch->a.t + timevalue * ms_per_timeunit[epoch->d] / 1000;
 }
 
