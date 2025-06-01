@@ -158,7 +158,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info) {
 	for (int i=var->nfiledims-1; i>=0; i--) {
 		nct_var* dim = nct_get_vardim(var, i+n_extra);
 		info->fstart[i] = dim->startdiff;
-		info->fcount[i] = dim->len;
+		info->fcount[i] = dim->len == -1 ? var->len_unlimited : dim->len;
 	}
 	if (var->concatlist.n && !n_extra) {
 		size_t max = var->concatlist.coords[0][0];
@@ -171,7 +171,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info) {
 	memset(move, 0, sizeof(move));
 	/* startpos is the index in the flattened array
 	   move is the index vector in the file array */
-	move[var->ndims-1] = info->start;
+	move[var->nfiledims-1] = info->start;
 	size_t result;
 	if ((result = make_coordinates(move, info->fcount, var->nfiledims)))
 		nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, nct_get_filename_var(var), var->name);
@@ -237,13 +237,13 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 		nct_return_error(-1);
 	}
 
-	long len1 = Min(info->ndata-info->pos, var1->len);
+	long start1 = info->start - relstart_var1;
+	long len1 = Min(info->ndata-info->pos, var1->len-start1);
 	var1->data = info->data;
 	var1->capacity = len1;
 	var1->not_freeable = 1;
 	var1->dtype = var->dtype; // var->dtype may have been manually changed after nct_set_concat
 	int nread;
-	long start1 = info->start - relstart_var1;
 	_nct_load_partially_as(var1, start1, start1+len1, var->dtype, &nread);
 	if (var1->data != info->data) {
 		nct_puterror("jotain outoa");
