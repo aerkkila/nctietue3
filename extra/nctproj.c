@@ -299,9 +299,6 @@ nct_var* nctproj_open_converted_var(nct_var* var, const char* from, const char* 
 	nct_set_stream(newvar, f);
 
 	newvar->nfiledims = newvar->ndims;
-	for (int i=MIN(newvar->ndims, nct_maxdims)-1; i>=0; i--)
-		newvar->filedimensions[i] = nct_get_vardim(newvar, i)->len;
-
 	return newvar;
 }
 

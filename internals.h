@@ -145,20 +145,18 @@ static void _nct_read_dim(nct_set* set, int dimid) {
 	if ((varid = nct_get_varid(set, name)) >= 0) {
 		(*v = set->vars[varid]); // linǩ to the existing var
 		(*v)->len		= len;
-		(*v)->filedimensions[0] = len;
-		(*v)->id_dim		= nct_dimid_(dimid);
+		(*v)->id_dim	= nct_dimid_(dimid);
 		return;
 	}
 	*v = malloc(sizeof(nct_var));
 	**v = (nct_var) {
 		.super         = set,
-			.id_dim        = nct_dimid_(dimid),
-			.ncid          = dimid,
-			.name          = strdup(name),
-			.freeable_name = 1,
-			.len           = len,
+		.id_dim        = nct_dimid_(dimid),
+		.ncid          = dimid,
+		.name          = strdup(name),
+		.freeable_name = 1,
+		.len           = len,
 	};
-	(**v).filedimensions[0] = len;
 	return;
 }
 

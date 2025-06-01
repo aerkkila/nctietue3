@@ -3,16 +3,17 @@
 
 typedef struct {
 	/* constants after initialization */
-	int size1;
+	int size1, dtype;
 	size_t ndata;
 	nct_ncget_partial_t getfun;
 	nct_ncget_t getfun_full;
+	long len_from_1; // how many data in a step in the first dimension
 	/* mutable variables */
 	size_t *fstart, *fcount, start;
 	/* restricted: only incremented at loading */
 	size_t pos;
 	void* data;
-	int ifile; // only used for printing progress (nct_verbose)
+	int iread; // only used for printing progress (nct_verbose)
 } loadinfo_t;
 
 static size_t get_fileind_from_coords(const nct_var* var, const size_t* coords) {
@@ -20,7 +21,7 @@ static size_t get_fileind_from_coords(const nct_var* var, const size_t* coords) 
 	size_t cum = 1;
 	for (int i=var->nfiledims-1; i>=0; i--) {
 		ind += cum * coords[i];
-		cum *= var->filedimensions[i];
+		cum *= nct_get_vardim(var, i)->len;
 	}
 	return ind;
 }
@@ -70,7 +71,7 @@ static void load_stream(nct_var* var, loadinfo_t* info) {
 	FILE* stream = nct_get_stream(var);
 	size_t nread, nloaded=0;
 	for (int idim=var->ndims-1; idim>=0; idim--)
-		if (info->fcount[idim] < var->filedimensions[idim])
+		if (info->fcount[idim] < nct_get_vardim(var, idim)->len)
 			return load_stream_partially(var, info, info->fstart, idim, 0, &nloaded);
 	if ((nread = fread(info->data, info->size1, var->len, stream)) != var->len)
 		nct_puterror("fread returned %zu instead of %zu in %s (%i)\n", nread, var->len, __func__, __LINE__);
@@ -90,80 +91,27 @@ static long make_coordinates(size_t* arr, const size_t* dims, int ndims) {
 	return carry / dimlen;
 }
 
-/* How many data will be read from the file. */
-static size_t get_read_length(const nct_var* var) {
-	long length = 1;
-	int ndims = var->nfiledims;
-	for (int i=0; i<ndims; i++) {
-		long omitted, omit0, omit1;
-		long flen = var->filedimensions[ndims-i-1];
-		const nct_var* dim = nct_get_vardim(var, var->ndims-i-1);
-		omit0 = dim->startdiff;
-		if (omit0 >= flen)
-			omitted = flen;
-		else {
-			omit1 = flen - (dim->len + omit0);
-			if (omit1 < 0)
-				omit1 = 0;
-			omitted = omit0 + omit1;
-		}
-		length *= flen-omitted;
-	}
-	return length;
-}
-
-static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_out) {
+static int get_filenum(loadinfo_t *info, nct_var* var) {
 	if (!var->ndims) {
-		if (start == 0) {
-			*start_out = *ifile_out = 0;
+		if (info->start == 0)
 			return 0;
-		}
 		else
 			goto error;
 	}
-	int ifile = 0, nfiles = var->concatlist.n + 1;
-	long length = 0, length_diff = 0;
-	long add = get_read_length(var);
+	if (var->concatlist.n == 0)
+		return 0;
 
-	nct_var* dim0 = nct_get_vardim(var, 0);
-	long carried_dimstart = dim0->startdiff - var->filedimensions[0];
-	carried_dimstart *= (carried_dimstart > 0);
+	long start_dim0 = info->start / info->len_from_1;
+	for (int ifile=0; ifile<var->concatlist.n; ifile++)
+		if (var->concatlist.coords[ifile][0] > start_dim0)
+			return ifile; // ifile-1 will be read
 
-	while (1) {
-		long new_length = length + add;
-		if (new_length > start) {
-			*start_out = start - length + length_diff; // where to start reading this file
-			*ifile_out = ifile;
-			return 0;
-		}
-		length = new_length;
-		if (++ifile >= nfiles)
-			goto error;
-		nct_var* cvar = var->concatlist.list[ifile-1];
-
-		if (!cvar->ndims) {
-			length_diff = 0;
-			add = 1;
-			continue;
-		}
-
-		nct_var* dim0 = nct_get_vardim(cvar, 0);
-		long old_start = dim0->startdiff;
-		long old_length = cvar->len;
-		nct_set_start(dim0, old_start + carried_dimstart);
-		length_diff = old_length - cvar->len;
-		carried_dimstart = dim0->startdiff - cvar->filedimensions[0];
-		carried_dimstart *= (carried_dimstart > 0);
-		if (carried_dimstart)
-			add = 0;
-		else
-			add = cvar->len;
-		nct_set_start(dim0, old_start);
-	}
+	if (var->concatlist.n && var->concatlist.coords[var->concatlist.n-1][1] > start_dim0)
+		return var->concatlist.n;
 
 error: __attribute__((cold));
-	   nct_puterror("Didn't find starting location (%li) from %s\n", start, nct_get_filename_var(var));
-	   nct_return_error(1);
+	   nct_puterror("Startlocation (%li: %li) not found from %s\n", info->start, start_dim0, nct_get_filename_var(var));
+	   nct_return_error(-1);
 }
 
 static void load_for_real(nct_var* var, loadinfo_t* info) {
@@ -197,24 +145,32 @@ Break:
 }
 
 /* fstart, fcount */
-static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
-	int n_extra = var->ndims - var->nfiledims;
-	/* fstart and fcount omitting startpos */
+static size_t set_info(const nct_var* var, loadinfo_t* info) {
 	if (var->nfiledims == 0) {
 		info->fstart[0] = 0;
 		info->fcount[0] = 1;
 		return 1;
 	}
+
+	/* fstart and fcount omitting startpos and endpos */
+	int n_extra = var->ndims - var->nfiledims;
 	for (int i=var->nfiledims-1; i>=0; i--) {
 		nct_var* dim = nct_get_vardim(var, i+n_extra);
 		info->fstart[i] = dim->startdiff;
-		info->fcount[i] = MIN(var->filedimensions[i] - info->fstart[i], dim->len);
+		info->fcount[i] = dim->len;
 	}
+	if (var->concatlist.n && !n_extra) {
+		size_t max = var->concatlist.coords[0][0];
+		if (max < info->fcount[0])
+			info->fcount[0] = max;
+	}
+
 	/* correct fstart and fcount with startpos */
-	size_t move[nct_maxdims] = {0};
+	size_t move[var->nfiledims];
+	memset(move, 0, sizeof(move));
 	/* startpos is the index in the flattened array
 	   move is the index vector in the file array */
-	move[var->ndims-1] = startpos;
+	move[var->ndims-1] = info->start;
 	size_t result;
 	if ((result = make_coordinates(move, info->fcount, var->nfiledims)))
 		nct_puterror("Overflow in make_coordinates: %zu, %s: %s\n", result, nct_get_filename_var(var), var->name);
@@ -229,34 +185,36 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 			break;
 		}
 	}
+
 	/* Make sure not to read more than asked. */
 	size_t len = limit_rectangle(info->fcount, var->nfiledims, info->ndata - info->pos);
 	return len;
 }
 
 static void print_progress(const nct_var* var, const loadinfo_t* info, size_t len) {
-	printf("Loading %zu %% (%zu / %zu); n=%zu; start={%li",
+	printf("%i. Loading %zu %% (%zu / %zu); n=%zu; start={%li", info->iread,
 		(info->pos+len)*100/info->ndata, info->pos+len, info->ndata, len, info->fstart[0]);
 	for (int i=1; i<var->nfiledims; i++)
 		printf(", %li", info->fstart[i]);
 	printf("}; count={%li", info->fcount[0]);
 	for (int i=1; i<var->nfiledims; i++)
 		printf(", %li", info->fcount[i]);
-	printf("}; from %i: %s (%s)", info->ifile, nct_get_filename_var(var), var->name);
+	printf("}; %s: %s", nct_get_filename_var(var), var->name);
 	nct_verbose_line_ending();
 }
 
+static nct_var* _nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype, int *Nread);
+
 static int next_load(nct_var* var, loadinfo_t* info) {
-	size_t start_thisfile;
 	int filenum;
 	if (info->pos >= info->ndata)
 		return 2; // All data are ready.
 	if (info->start >= var->len)
 		return 1; // This virtual file is ready.
-	if (get_filenum(info->start, var, &filenum, &start_thisfile))
-		return -1; // an error which shouldn't happen
+	if ((filenum = get_filenum(info, var)) < 0)
+		return -1; // error
 	if (filenum == 0) {
-		size_t len = set_info(var, info, start_thisfile);
+		size_t len = set_info(var, info);
 		if (nct_verbose)
 			print_progress(var, info, len);
 		load_for_real(var, info);
@@ -265,23 +223,42 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 		info->data += len * info->size1;
 		info->pos += len;
 		info->start += len;
-		info->ifile++;
+		info->iread++;
 		return 0;
 	}
-	/* If this wasn't the first file, this function is called again to handle
-	   concatenation correctly on this file. */
+
+	/* a variable from the concatlist */
 	nct_var* var1 = var->concatlist.list[filenum-1];
-	long old_start = info->start;
-	info->start = start_thisfile;
-	while (!next_load(var1, info));
-	info->start += old_start - start_thisfile;
+	long start_var1 = var->concatlist.coords[filenum-1][0] * info->len_from_1;
+	long end_var1 = var->concatlist.coords[filenum-1][1] * info->len_from_1;
+	if (end_var1 - start_var1 != var1->len) {
+		nct_puterror("concatvar size mismatch\n");
+		nct_return_error(-1);
+	}
+
+	long len1 = Min(info->ndata-info->pos, var1->len);
+	var1->data = info->data;
+	var1->capacity = len1;
+	var1->not_freeable = 1;
+	int nread;
+	long start1 = info->start - start_var1;
+	_nct_load_partially_as(var1, start1, start1+len1, var->dtype, &nread);
+	if (var1->data != info->data) {
+		nct_puterror("jotain outoa");
+		free(var1->data);
+	}
+	info->data += len1 * info->size1;
+	info->pos += len1;
+	info->start += len1;
+	info->iread += nread;
+
 	return 0;
 }
 
 static nct_var* load_coordinate_var(nct_var* var) {
 	nct_ncget_t getfulldata = nct_getfun[var->dtype];
 	int size1 = nctypelen(var->dtype);
-	size_t len = var->filedimensions[0];
+	size_t len = var->len + var->startdiff - var->enddiff;
 	if (!var->data) {
 		var->data = malloc(len*size1);
 		var->capacity = len;
@@ -316,6 +293,8 @@ static void* nct_load_async(void *vargs) {
 }
 
 nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
+	if (!nct_loadable(var))
+		return NULL;
 	if (var->load_async) {
 		struct loadthread_args *args = malloc(sizeof(args[0]));
 		args->var = var;
@@ -326,9 +305,6 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 		return var;
 	}
 
-	if (!nct_loadable(var))
-		return NULL;
-	size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
 	if ((var->dtype == NC_CHAR) + (dtype == NC_CHAR) + 2*(dtype == NC_NAT) == 1) {
 		nct_puterror("Cannot convert to or from NC_CHAR. Variable %s%s%s in %s%s%s\n",
 			nct_varname_color, var->name, nct_default_color, nct_varset_color, nct_get_filename_var(var), nct_default_color);
@@ -345,10 +321,18 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 		nct_allocate_varmem(var);
 		return ((nct_ncget_t)nct_getfun[var->dtype])(var->super->ncid, var->ncid, var->data), var;
 	}
+
 	size_t old_length = var->len;
-	var->len = end-start;
+	var->len = end-start; // huono, jos load_async
 	nct_allocate_varmem(var);
 	var->len = old_length;
+
+	int nread;
+	return _nct_load_partially_as(var, start, end, dtype, &nread);
+}
+
+static nct_var* _nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype, int *Nread) {
+	size_t fstart[var->nfiledims], fcount[var->nfiledims]; // start and count in a real file
 	loadinfo_t info = {
 		.size1	= nctypelen(var->dtype),
 		.fstart	= fstart,
@@ -358,12 +342,15 @@ nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype
 		.getfun	= nct_getfun_partial[var->dtype],
 		.getfun_full = nct_getfun[var->dtype],
 		.start	= start,
+		.len_from_1 = nct_get_len_from(var, 1),
+		.dtype  = dtype,
 	};
 	while (!next_load(var, &info));
 	if (info.ndata != info.pos)
 		nct_puterror("%s: Loaded %zu instead of %zu\n", var->name, info.pos, info.ndata);
 	var->startpos = start;
 	var->endpos = end;
+	*Nread = info.iread;
 	return var;
 }
 

@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
@@ -20,7 +21,7 @@
 #define Min(a, b) ((a) < (b) ? a : (b))
 #define Max(a, b) ((a) > (b) ? a : (b))
 
-nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
+nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left, long concstart, long conclen);
 
 #define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
 
@@ -223,8 +224,7 @@ failed:
 	nct_return_error(NULL);
 }
 
-nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
-	int ndims, int* dimids) {
+nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name, int ndims, int* dimids) {
 	if (set->varcapacity < set->nvars+1)
 		if (!(set->vars = realloc(set->vars, (set->varcapacity=set->nvars+3)*sizeof(void*))))
 			goto failed;
@@ -244,6 +244,8 @@ nct_var* nct_add_var(nct_set* set, void* src, nc_type dtype, char* name,
 		goto failed;
 	memcpy(var->dimids, dimids, ndims*sizeof(int));
 	set->nvars++;
+	if (nct_get_vardim(var, 0)->len == -1)
+		var->len_unlimited = 1;
 	var->len = nct_get_len_from(var, 0);
 	var->endpos = var->len; // User will provide the data before using it.
 	return var;
@@ -364,16 +366,11 @@ static nct_var* _nct_concat_handle_new_dim(nct_var *var, nct_set *concatenation)
 
 /* Concatenation is currently not supported along other existing dimensions than the first one.
    Coordinates will be loaded if aren't already.
-   Variable will not be loaded, except if the first is loaded and the second is not.
-   When unloaded sets are concatenated, they must not be freed before loading the data.
-   The following is an error:
- *	concat(set0, set1)
- *	free(set1)
- *	load(set0->vars[n])
- */
+   Variable will not be loaded, except if the first is loaded and the second is not. */
 nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* concatdim, int howmany_left, const int* varids0, int nvars) {
 	int dimid0 = nct_get_dimid(vs0, concatdim);
-	if (dimid0 < 0)
+	char dim_in_vs0 = dimid0 >= 0;
+	if (!dim_in_vs0)
 		dimid0 = nct_dimid(nct_add_dim(vs0, 1, concatdim));
 	else if (vs0->dims[dimid0]->len == 0) {
 		/* Change length zero to one. We assume that such dimension does not belong to any variable. */
@@ -387,8 +384,10 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* concatdim, int
 
 	/* Concatenate the dimension. */
 	int dimid1 = nct_get_dimid(vs1, concatdim);
-	if (dimid1 < 0)
-		vs0->dims[dimid0]->len++;
+	char dim_in_vs1 = dimid1 >= 0;
+	long concatstart = vs0->dims[dimid0]->len + vs0->dims[dimid0]->startdiff, concatlength;
+	if (!dim_in_vs1)
+		vs0->dims[dimid0]->len += concatlength = 1;
 	else {
 		/* Change length zero to one. We assume that such dimension does not belong to any variable. */
 		if (vs1->dims[dimid1]->len == 0) {
@@ -399,9 +398,9 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* concatdim, int
 				memset(dim->data, 0, nctypelen(dim->dtype));
 			}
 		}
-		vs0->dims[dimid0]->len += vs1->dims[dimid1]->len;
+		vs0->dims[dimid0]->len += concatlength = vs1->dims[dimid1]->len;
 
-		/* If the dimension is also a variable, concat that */
+		/* If the dimension is also a variable, concatenate that */
 		int varid0 = nct_get_varid(vs0, concatdim);
 		int varid1 = nct_get_varid(vs1, concatdim);
 
@@ -417,40 +416,72 @@ nct_set* nct_concat_varids_name(nct_set *vs0, nct_set *vs1, char* concatdim, int
 		}
 	}
 
-	int concatdim_is_new = 1;
-	nct_foreach(vs0, var)
-		if (nct_get_vardimid(var, dimid0) >= 0) {
-			concatdim_is_new = 0;
-			break; }
+	char dim_used_in_vs0 = 0; // even if dim_in_vs0, it might not be connected to any variable
+	if (dim_in_vs0)
+		nct_foreach(vs0, var)
+			if (nct_get_vardimid(var, dimid0) >= 0) {
+				dim_used_in_vs0 = 1;
+				break; }
 
-	/* Concatenate all variables.
+	char dim_used_in_vs1 = 0;
+	if (dim_in_vs1)
+		nct_foreach(vs1, var)
+			if (nct_get_vardimid(var, dimid1) >= 0) {
+				dim_used_in_vs1 = 1;
+				break; }
+
+	/* Decide which variable can be concatenated. varids1[i] goes to varids0_new[i] */
+	int nvarsmin = Min(vs0->nvars, vs1->nvars);
+	int varids0_new[nvarsmin];
+	int varids1[nvarsmin];
+	int nvarsnew = 0;
+	nct_var *var0 = varids0 ? vs0->vars[varids0[0]] : nct_firstvar(vs0);
+	int iloop = 0;
+	while (1) {
+		nct_var *var1 = nct_get_var(vs1, var0->name);
+		if (!var1)
+			goto nextvar;
+		if (dim_used_in_vs0 && nct_get_vardimid(var0, dimid0) < 0)
+			goto nextvar;
+		if (dim_used_in_vs1 && nct_get_vardimid(var1, dimid1) < 0)
+			goto nextvar;
+		varids0_new[nvarsnew] = nct_varid(var0);
+		varids1[nvarsnew] = nct_varid(var1);
+		nvarsnew++;
+nextvar:
+		if (nvars >= 0) {
+			if (++iloop < nvars)
+				var0 = vs0->vars[varids0[iloop]];
+			else break;
+		}
+		else
+			if (!(var0 = nct_nextvar(var0)))
+				break;
+	}
+	nvars = nvarsnew;
+	varids0 = varids0_new;
+
+	/* Concatenate all possible variables.
 	   Called concat-functions change var->len but not vardim->len which has already been changed above
 	   so that changes would not cumulate when having multiple variables. */
-	int iloop = 0;
-	nct_var* var0 = varids0 ? vs0->vars[varids0[iloop]] : nct_firstvar(vs0);
-	do {
-		nct_var* var1 = nct_get_var(vs1, var0->name);
-		if (!var1)
-			continue;
-		if (concatdim_is_new) {
+	for (int ivar=0; ivar<nvars; ivar++) {
+		nct_var *var0 = vs0->vars[varids0[ivar]];
+		nct_var *var1 = vs1->vars[varids1[ivar]];
+		if (!dim_used_in_vs0) {
 			size_t len = var0->len;
 			nct_add_vardim_first(var0, dimid0);
 			var0->len = len; // concatenation will also increase length so let's not do it twice
 		}
-		else if (nct_get_vardimid(var0, dimid0) < 0)
-			_nct_concat_handle_new_dim(var0, vs1);
 		if (var0->endpos < var0->len)
 			/* To be concatenated when loaded. */
-			nct_set_concat(var0, var1, howmany_left);
+			nct_set_concat(var0, var1, howmany_left, concatstart, concatlength);
 		else {
 			/* Concatenate now. */
-			if(var1->endpos-var1->startpos < var1->len)
+			if (var1->endpos-var1->startpos < var1->len)
 				nct_load(var1); // Now data is written here and copied to var0. Not good.
 			_nct_concat_var(var0, var1, dimid0, howmany_left);
 		}
-	} while (++iloop != nvars && (
-			(varids0 && (var0 = vs0->vars[varids0[iloop]])) ||
-			(var0 = nct_nextvar(var0))));
+	}
 
 	if (howmany_left == 0)
 		_nct_concat_handle_new_dim(NULL, NULL); // to reset the dimension to be added
@@ -657,11 +688,23 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	nct_var *dstdim = NULL;
 
 	for (int i=0; i<ndims; i++) {
-		nct_var* srcdim = src->super->dims[src->dimids[i]];
+		nct_var* srcdim = nct_get_vardim(src, i);
 		dimids[i] = nct_get_dimid(dest, srcdim->name);
+		nct_var *dstdim = NULL;
+		if (dimids[i] >= 0) {
+			dstdim = dest->dims[dimids[i]];
+			if (i==0 && dstdim->len == -1) {
+				if (srcdim->len != -1)
+					src->len_unlimited = srcdim->len;
+			}
+			else if (dstdim->len != srcdim->len) {
+				if (!(i==0 && srcdim->len == -1))
+					dstdim = NULL;
+			}
+		}
 		/* Create the dimension if not present in dest. */
 		/* Create a new dimension if lengths mismatch in source and destination. */
-		if (dimids[i] < 0 || dest->dims[dimids[i]]->len != srcdim->len) {
+		if (!dstdim) {
 			nct_var *dim = NULL;
 			if (dimids[i] >= 0)
 				dim = find_corresponding_coord(srcdim, dest);
@@ -672,8 +715,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 			}
 			dimids[i] = nct_dimid(dim);
 		}
-		dstdim = dest->dims[dimids[i]];
-		if (nct_iscoord(srcdim) && !nct_iscoord(dstdim)) {
+		else if (nct_iscoord(srcdim) && !nct_iscoord(dstdim)) {
 			dstdim = nct_dim2coord(dstdim, NULL, srcdim->dtype);
 			if (srcdim != src)
 				_nct_copy_var_internal(dstdim, srcdim, 0);
@@ -681,15 +723,19 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 		}
 	}
 
-	if (!nct_iscoord(src))
+	if (!nct_iscoord(src)) {
 		var = nct_add_var(dest, NULL, src->dtype, strdup(src->name), ndims, dimids);
+		if (src->len_unlimited) {
+			var->len_unlimited = src->len_unlimited;
+			var->len = var->endpos = nct_get_len_from(var, 0);
+		}
+	}
 	else
 		var = dstdim;
 	var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
 	var->ncid = src->ncid;
 	var->nfiledims = src->nfiledims;
 	var->concatlist = src->concatlist;
-	memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
 	var->freeable_name = 1;
 	return _nct_copy_var_internal(var, src, link);
 }
@@ -1043,7 +1089,7 @@ void _nct_free(int _, ...) {
 	va_list args;
 	va_start(args, _);
 	intptr_t addr;
-	while((int)(addr = va_arg(args, intptr_t)) != -1)
+	while ((int)(addr = va_arg(args, intptr_t)) != -1)
 		nct_free1((nct_set*)addr);
 	va_end(args);
 }
@@ -1086,7 +1132,7 @@ static void _nct_unlink_fileinfo(struct nct_fileinfo_t *fileinfo) {
 
 static void _nct_free_var(nct_var* var) {
 	free(var->dimids);
-	for(int i=0; i<var->natts; i++)
+	for (int i=0; i<var->natts; i++)
 		_nct_free_att(var->atts+i);
 	free(var->atts);
 	nct_unlink_data(var);
@@ -1095,6 +1141,9 @@ static void _nct_free_var(nct_var* var) {
 	if (var->freeable_name)
 		free(var->name);
 	free(var->concatlist.list);
+	free(var->concatlist.coords);
+	free(var->concatlist.shortening);
+	nct_free1(var->concatlist.super);
 	memset(&var->concatlist, 0, sizeof(var->concatlist));
 	if (var->fileinfo)
 		_nct_unlink_fileinfo(var->fileinfo);
@@ -1105,11 +1154,11 @@ void nct_free1(nct_set* set) {
 	if (!set) return;
 	int n;
 	n = set->natts;
-	for(int i=0; i<n; i++)
+	for (int i=0; i<n; i++)
 		_nct_free_att(set->atts+i);
 	free(set->atts);
 	n = set->nvars;
-	for(int i=0; i<n; i++) {
+	for (int i=0; i<n; i++) {
 		if (nct_iscoord(set->vars[i]))
 			continue;
 		_nct_free_var(set->vars[i]);
@@ -1117,7 +1166,7 @@ void nct_free1(nct_set* set) {
 		free(set->vars[i]);
 	}
 	n = set->ndims;
-	for(int i=0; i<n; i++) {
+	for (int i=0; i<n; i++) {
 		_nct_free_var(set->dims[i]);
 		memset(set->dims[i], 0, sizeof(nct_var));
 		free(set->dims[i]);
@@ -1271,10 +1320,14 @@ int nct_get_dimid(const nct_set* restrict set, const char* restrict name) {
 }
 
 size_t nct_get_len_from(const nct_var* var, int start) {
+	if (var->ndims == 0)
+		return 1;
 	size_t len = 1;
 	int ndims = var->ndims;
+	if (start == 0 && nct_get_vardim(var, 0)->len == -1)
+		len *= var->len_unlimited, ++start;
 	for (int i=start; i<ndims; i++)
-		len *= var->super->dims[var->dimids[i]]->len;
+		len *= nct_get_vardim(var, i)->len;
 	return len;
 }
 
@@ -1312,6 +1365,20 @@ long long nct_getl_integer(const nct_var* var, size_t ind) {
 	nct_ncget_1_t fun = nct_getfun_1[NC_INT64];
 	fun(var->super->ncid, var->ncid, coords, &result);
 	return result;
+}
+
+nct_var* nct_make_unlimited(nct_var *dim) {
+	if (dim->len == -1)
+		return NULL;
+	nct_foreach(dim->super, var) {
+		int id = nct_get_vardimid(var, nct_dimid(dim));
+		if (id > 0)
+			return NULL;
+		if (id == 0)
+			var->len_unlimited = dim->len;
+	}
+	dim->len = -1;
+	return dim;
 }
 
 nct_var* nct_interpolate(nct_var* var, int idim, nct_var* todim, int inplace_if_possible) {
@@ -1814,9 +1881,9 @@ void nct_print_atts(nct_var* var, const char* indent0, const char* indent1) {
 }
 
 void nct_print_var_meta(const nct_var* var, const char* indent) {
-	printf("%s%s%s %s%s(%zu)%s: %s  %i dimensions: ( ",
+	printf("%s%s%s %s%s(%lu)%s: %s  %i dimensions: ( ",
 		indent, nct_type_color, nct_typenames[var->dtype],
-		nct_varname_color, var->name, var->len, nct_default_color,
+		nct_varname_color, var->name, (long)var->len, nct_default_color,
 		indent, var->ndims);
 	for(int i=0; i<var->ndims; i++) {
 		nct_var* dim = var->super->dims[var->dimids[i]];
@@ -1836,9 +1903,9 @@ void nct_print_var(nct_var* var, const char* indent) {
 }
 
 void nct_print_dim(nct_var* var, const char* indent) {
-	printf("%s%s%s %s%s(%zu)%s:\n",
+	printf("%s%s%s %s%s(%li)%s:\n",
 		indent, nct_type_color, nct_typenames[var->dtype],
-		nct_dimname_color, var->name, var->len, nct_default_color);
+		nct_dimname_color, var->name, (long)var->len, nct_default_color);
 	if (nct_iscoord(var)) {
 		printf("%s  [", indent);
 		nct_print_data(var);
@@ -2009,9 +2076,9 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
 
 	dest->dims = calloc(dest->dimcapacity, sizeof(void*));
 	dest->vars = calloc(dest->varcapacity, sizeof(void*));
-	for(int i=0; i<nvars; i++)
+	for (int i=0; i<nvars; i++)
 		_nct_read_var_info(dest, i, flags);
-	for(int i=0; i<ndims; i++)
+	for (int i=0; i<ndims; i++)
 		/* If a variable is found with the same name,
 		   this will make a pointer to that instead of creating a new object.
 		   Id will then become nct_coordid(var_id). */
@@ -2020,19 +2087,9 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
 	nct_foreach(dest, var) {
 		size_t len = 1;
 		int ndims = var->ndims;
-		int too_many;
-		if ((too_many = ndims>nct_maxdims))
-			ndims = nct_maxdims;
-		for(int i=0; i<ndims; i++) {
-			size_t len1 = nct_get_vardim(var, i)->len;
-			var->filedimensions[i] = len1;
-			len *= len1;
-		}
-		for(int i=ndims; i<nct_maxdims; i++)
-			var->filedimensions[i] = 1;
+		for (int i=0; i<ndims; i++)
+			len *= nct_get_vardim(var, i)->len;
 		var->len = len;
-		if (too_many)
-			var->len = nct_get_len_from(var, 0);
 	}
 	return dest;
 }
@@ -2360,39 +2417,52 @@ void nct_rm_var(nct_var* var) {
 	free(var);
 }
 
-/* This uses static functions from load_data.h */
-nct_var* nct_update_concatlist(nct_var* var0) {
-	if (!(var0->concatlist.n))
-		return var0;
-	if (var0->len == 0) {
-		var0->concatlist.n = 0;
-		return var0;
+/* Dimensions have been already handled so that concatenation is along the first dimension of var0. */
+nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left, long concatstart, long concatlength) {
+	/* start can be not in the end, if the dimension has been truncated after previous concatenation */
+	int concatpos;
+	for (concatpos=var0->concatlist.n-1; concatpos>=0; concatpos--) {
+		long *startend = var0->concatlist.coords[concatpos];
+		if (startend[1] <= concatstart)
+			break;
+		if (startend[0] <= concatstart) {
+			startend[1] = concatstart;
+			int newlen = startend[1] - startend[0];
+			nct_var *var = var0->concatlist.list[concatpos];
+			nct_var *dim = nct_get_vardim(var, 0);
+			assert(dim->len == -1);
+			nct_set_length_unlimited_dim(var, newlen);
+			break;
+		}
 	}
 
-	int fileno;
-	size_t start_trunc_new;
-	if (get_filenum(var0->len, var0, &fileno, &start_trunc_new))
-		return var0;
-	var0->concatlist.n = fileno - !start_trunc_new; // truncate the list
-	if (!start_trunc_new)
-		return var0;
-
-	nct_var* var1 = fileno ? var0->concatlist.list[fileno-1] : var0;
-	nct_set_length(var1, start_trunc_new);
-	nct_update_concatlist(var1);
-	return var0;
-}
-
-nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
-	int size = var0->concatlist.n+1 + howmany_left; // how many var pointers will be put into the concatenation list
+	int size = var0->concatlist.n+1 + howmany_left;
 	if (var0->concatlist.mem < size) {
-		var0->concatlist.list = realloc(var0->concatlist.list, size*sizeof(void*));
+#define alloc(a, size) a = realloc(a, size*sizeof(a[0]))
+		alloc(var0->concatlist.list, size);
+		alloc(var0->concatlist.coords, size);
+		alloc(var0->concatlist.shortening, size);
+#undef alloc
 		var0->concatlist.mem = size;
 	}
-	((nct_var**)var0->concatlist.list)[var0->concatlist.n++] = var1;
-	var0->len += var1->len;
-	if (!var1->fileinfo)
-		var1->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
+	int *n = &var0->concatlist.n;
+	if (!var0->concatlist.super) {
+		var0->concatlist.super = calloc(1, sizeof(nct_set));
+		var0->concatlist.super->owner = 1;
+		var0->concatlist.super->varcapacity = howmany_left + 1;
+		var0->concatlist.super->vars = malloc(var0->concatlist.super->varcapacity * sizeof(void*));
+	}
+	if (var0->ndims == var1->ndims)
+		nct_make_unlimited(nct_get_vardim(var1, 0));
+	nct_var *newvar = nct_copy_var(var0->concatlist.super, var1, -1);
+	var0->concatlist.list[*n] = newvar;
+	var0->concatlist.coords[*n][0] = concatstart;
+	var0->concatlist.coords[*n][1] = concatstart + concatlength;
+	var0->concatlist.shortening[*n] = 0;
+	++*n;
+	var0->len += newvar->len;
+	if (!newvar->fileinfo)
+		newvar->fileinfo = _nct_link_fileinfo(newvar->super->fileinfo);
 	return var0;
 }
 
@@ -2401,13 +2471,55 @@ nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter)
 	return nct_set_length(dim, ind);
 }
 
-nct_var* nct_set_length(nct_var* dim, size_t arg) {
-	dim->enddiff += arg - dim->len;
-	dim->len = arg;
-	nct_foreach(dim->super, var)
+void _set_length_concatlist(nct_var *var, nct_var *dim, long length) {
+	if (!var->concatlist.super)
+		return;
+	nct_var *dim1 = nct_get_dim(var->concatlist.super, dim->name);
+	if (!dim1)
+		return;
+	if (dim1->len != -1)
+		/* not the first dimension, concatenated in parallel */
+		nct_set_length(dim1, length);
+	else {
+		/* the first dimension, concatenated in series */
+		long wantedpos = length + dim1->startdiff;
+		for (int i=0; i<var->concatlist.mem; i++)
+			if (var->concatlist.coords[i][1] + var->concatlist.shortening[i] >= wantedpos) {
+				long *startend = var->concatlist.coords[i];
+				long newlen = wantedpos - startend[0];
+				int diff = newlen - startend[1];
+				var->concatlist.shortening[i] -= diff;
+				startend[1] = startend[0] + newlen;
+				var->concatlist.n = i;
+				nct_set_length_unlimited_dim(var->concatlist.list[i], newlen);
+				return;
+			}
+		nct_puterror("could not set length %zu\n", length);
+	}
+}
+
+nct_var* nct_set_length(nct_var* dim, size_t length) {
+	dim->enddiff += length - dim->len;
+	if (dim->len != -1)
+		dim->len = length;
+	nct_foreach(dim->super, var) {
+		if (dim->len == -1)
+			var->len_unlimited = length;
 		var->len = nct_get_len_from(var, 0);
+		_set_length_concatlist(var, dim, length);
+	}
 	return dim;
 }
+
+nct_var* nct_set_length_unlimited_dim(nct_var *var, long len) {
+	long diff = len - var->len_unlimited;
+	var->len_unlimited = len;
+	var->enddiff_unlimited += diff;
+	var->len = nct_get_len_from(var, 0);
+	_set_length_concatlist(var, nct_get_vardim(var, 0), len);
+	return var;
+}
+
 
 nct_var* nct_shorten_length(nct_var* dim, size_t arg) {
 	if (dim->len < arg)
@@ -2415,27 +2527,27 @@ nct_var* nct_shorten_length(nct_var* dim, size_t arg) {
 	return nct_set_length(dim, arg);
 }
 
-nct_var* nct_iterate_concatlist(nct_var* var) {
-	static int n_concat, iconcat;
-	static nct_var* svar;
-	if (var) {
-		svar = var;
-		n_concat = var->concatlist.n;
-		iconcat = 0;
-		return var;
-	}
-	if (iconcat++ >= n_concat)
-		return NULL;
-	return svar->concatlist.list[iconcat-1];
-}
-
 nct_var* nct_set_rstart(nct_var* dim, long change) {
 	dim->startdiff += change;
-	dim->len -= change;
 	if (dim->data)
 		dim->data += change*nctypelen(dim->dtype);
-	nct_foreach(dim->super, var)
+	if (dim->len != -1)
+		dim->len -= change;
+	nct_foreach(dim->super, var) {
+		if (dim->len == -1)
+			var->len_unlimited -= change;
 		var->len = nct_get_len_from(var, 0);
+		if (var->concatlist.super) {
+			nct_var *dim1 = nct_get_dim(var->concatlist.super, dim->name);
+			if (!dim1)
+				continue;
+			if (dim->len != -1)
+				nct_set_rstart(dim1, change);
+			else {
+
+			}
+		}
+	}
 	return dim;
 }
 

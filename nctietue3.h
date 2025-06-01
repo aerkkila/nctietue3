@@ -23,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 8;
+static const int __nct_version_in_executable = 9;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -37,10 +37,6 @@ extern FILE* nct_stderr;
 
 /* Use this to execute a task immediately after data has been loaded.
    Disable by setting to NULL (default).
-   Useful if a single call to nct_load results in multiple calls to nc_get_var
-   and something has to be done after each call to the latter.
-   For example if multiple files are concatenated by nct_load
-   and all of them contain an attribute telling a number to multiply data with.
    Arguments
  *	var: The variable from the possible concatenation list. Not necessarily the root variable.
  *	data: The loaded data. var->data does not necessarily contain the loaded data.
@@ -134,7 +130,7 @@ fail: __attribute__((cold));
  *	interrupt in those functions which are likely used before the real work.
  *	pass      in those functions which are likely used after  the real work.
  * interrupt:
- *	asm("int $3");
+ *	asm ("int $3");
  * pass:
  *	don't do anything
  */
@@ -189,30 +185,34 @@ struct nct_att {
 	unsigned freeable;
 };
 
-#define nct_maxdims 5
 struct nct_var {
-	nct_set*	super;
-	int		id_dim,	// location of this in set->dims + 1, if exists there
-			id_var,	// location of this in set->vars + 1, if exists there
-			ncid;	// ncid of the variable if this is a coordinate (both dim and var)
-	char*	name;
-	char	freeable_name;
-	int		ndims, nfiledims, dimcapacity;
-	int*	dimids; // dimensions in the virtual file which may consist of multiple real files
-	int		natts, attcapacity;
-	nct_att*	atts;
-	size_t	len, capacity;
-	long	startpos, endpos; // if virtual file is loaded partially, from which to which index
-	long    startdiff, enddiff;
-	long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
-	nc_type	dtype;
-	char	not_freeable,
-			not_to_write; // nct_create_nc and similar functions will define the variable but not call nc_put_var
-	int 	*nusers, *nusers_stream; // the first user is not counted
-	void*	data;
+	nct_set* super;
+	int      id_dim,	// location of this in set->dims + 1, if exists there
+			 id_var,	// location of this in set->vars + 1, if exists there
+			 ncid;	// ncid of the variable if this is a coordinate (both dim and var)
+	char*    name;
+	char     freeable_name;
+	int      ndims, nfiledims, dimcapacity;
+	int*     dimids; // dimensions in the virtual file which may consist of multiple real files
+	int      natts, attcapacity;
+	nct_att* atts;
+	/* len == -1 is unlimited, the used size is then given in len_unlimited */
+	size_t	 len, capacity;
+	long     len_unlimited, enddiff_unlimited;
+	long     startpos, endpos; // if virtual file is loaded partially, from which to which index
+	long     startdiff, enddiff;
+	nc_type  dtype;
+	char     not_freeable,
+			 not_to_write; // nct_create_nc and similar functions will define the variable but not call nc_put_var
+	int      *nusers, *nusers_stream; // the first user is not counted
+	void*    data;
 	struct {
-		void **list;
-		int n, mem;
+		nct_var **list;
+		/* Start and end indices of each concatenated variable.
+		   Each virtual variable contributes a natural number of indices along the first dimension. */
+		long (*coords)[2];
+		int n, mem, *shortening;
+		nct_set *super;
 	} concatlist;
 	FILE    *stream;
 	int     deflate; // compression level for nc_def_var_deflate. If > 0, shuffle = 1
@@ -223,16 +223,16 @@ struct nct_var {
 };
 
 struct nct_set {
-	int		nvars, varcapacity;
-	nct_var**	vars;
-	int		ndims, dimcapacity;
-	nct_var**	dims; // points to a variable with the same name if available
-	int		natts, attcapacity;
-	nct_att*	atts;
-	int		ncid, owner;
+	int       nvars, varcapacity;
+	nct_var** vars;
+	int       ndims, dimcapacity;
+	nct_var** dims; // points to a variable with the same name if available
+	int       natts, attcapacity;
+	nct_att*  atts;
+	int       ncid, owner;
 	/* private */
-	void*	fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
-	char inmem, islist;
+	void*     fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
+	char      inmem, islist;
 };
 
 struct nct_anyd {
@@ -281,7 +281,6 @@ void nct_close_nc(int *ncid); // calls nc_close(ncid)
    }*/
 nct_set* nct_concat_varids(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left, const int* varids0, int nvars);
 nct_set* nct_concat(nct_set *vs0, nct_set *vs1, char* dimname, int howmany_left);
-nct_var* nct_iterate_concatlist(nct_var*); // first call returns the input, then called with NULL as argument until returns NULL
 
 /* see nct_timegm0 */
 long long nct_convert_time_anyd(time_t time, nct_anyd units);
@@ -334,6 +333,7 @@ long long nct_diff_at_integer(nct_var* var, long ind);
    */
 nct_var* nct_drop_vardim(nct_var* var, int dim, int shrink);
 nct_var* nct_drop_vardim_first(nct_var*) __attribute__((deprecated ("Use nct_drop_vardim instead.")));
+nct_var* nct_make_unlimited(nct_var *dim);
 
 /* Fill value won't be correct if some variables have floating point data and other variables integer data.
    To expand in start: start0_end1 == 0.
@@ -681,6 +681,7 @@ int nct_rm_unused_dims(nct_set *set);
  */
 nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter);
 nct_var* nct_set_length(nct_var* coord, size_t length);
+nct_var* nct_set_length_unlimited_dim(nct_var *var, long len); // argument is var, not dim
 nct_var* nct_set_start(nct_var* coord, size_t offset); // sets absolute start regardless of current start
 nct_var* nct_set_rstart(nct_var* coord, long offset); // relative: adds offset to current start
 nct_var* nct_set_timestart_str(nct_var* coord, const char *timestr, int beforeafter);
@@ -696,24 +697,6 @@ nct_var* nct_transpose_order_ptr(nct_var* var, const int* order);
 nct_var* nct_transpose_names_ptr(nct_var* var, const char* const* names);
 nct_var* nct_transpose_order(nct_var* var, ...);
 nct_var* nct_transpose_names(nct_var* var, ...);
-
-/*
- * Concatenation can be tricky when data is not loaded:
- * Here '-' describes a datum in the virtual file.
- * concatenation:	----|------|------ // '|' is a border between real files
- * set_length:		----|------(|------) // data in '()' is not in the virtual file anymore
- * Concatenation of a new file:
- * expected result:	----|------|========(|------) // '=' is data from the new file
- * actual result:	----|------|------|==(======)
- * This is because the concatenation list is unchanged in set_length.
- *
- * To avoid this error, one has to explicitely call nct_update_concatlist:
- * concatenation:	----|------|------
- * set_length:		----|------(|------)
- * update:		----|------
- * new concatenation:	----|------|========
- */
-nct_var* nct_update_concatlist(nct_var*);
 
 /* This frees the data unless used by another variable (see nct_copy_var) or flagged as not_freeable.
  * Can be used to limit RAM usage:
