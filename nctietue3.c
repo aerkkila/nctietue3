@@ -1141,11 +1141,14 @@ static void _nct_free_var(nct_var* var) {
 	var->capacity = 0;
 	if (var->freeable_name)
 		free(var->name);
-	free(var->concatlist.list);
-	free(var->concatlist.coords);
-	free(var->concatlist.shortening);
-	nct_free1(var->concatlist.super);
-	memset(&var->concatlist, 0, sizeof(var->concatlist));
+	if (var->concatlist.nusers && --*var->concatlist.nusers == 0) {
+		free(var->concatlist.list);
+		free(var->concatlist.coords);
+		free(var->concatlist.shortening);
+		free(var->concatlist.nusers);
+		nct_free1(var->concatlist.super);
+		memset(&var->concatlist, 0, sizeof(var->concatlist));
+	}
 	if (var->fileinfo)
 		_nct_unlink_fileinfo(var->fileinfo);
 	var->fileinfo = NULL;
@@ -2446,6 +2449,8 @@ nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left, long con
 		var0->concatlist.super->owner = 1;
 		var0->concatlist.super->varcapacity = howmany_left + 1;
 		var0->concatlist.super->vars = malloc(var0->concatlist.super->varcapacity * sizeof(void*));
+		var0->concatlist.nusers = malloc(sizeof(int));
+		var0->concatlist.nusers[0] = 1;
 	}
 	if (var0->ndims == var1->ndims)
 		nct_make_unlimited(nct_get_vardim(var1, 0));

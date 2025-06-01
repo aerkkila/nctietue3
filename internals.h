@@ -48,6 +48,11 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 	var->startpos = src->startpos;
 	var->endpos = src->endpos;
 
+	if (src->concatlist.nusers) {
+		memcpy(&var->concatlist, &src->concatlist, sizeof(var->concatlist));
+		++*var->concatlist.nusers;
+	}
+
 	return var;
 }
 
