@@ -1373,7 +1373,8 @@ int nct_link_data(nct_var* dest, nct_var* src) {
 	dest->data = src->data;
 	dest->nusers = src->nusers;
 	dest->not_freeable = src->not_freeable;
-	dest->rule[nct_r_start].arg.lli = src->rule[nct_r_start].arg.lli;
+	dest->startdiff = src->startdiff;
+	dest->enddiff = src->enddiff;
 	return 0;
 }
 
@@ -2315,10 +2316,10 @@ nct_var* nct_rename(nct_var* var, char* name, int freeable) {
 	return var;
 }
 
-nct_var* nct_rewind(nct_var* var) {
+void* nct_rewinded_data(nct_var* var) {
 	if (var->data)
-		var->data -= var->rule[nct_r_start].arg.lli*nctypelen(var->dtype);
-	return var;
+		return (char*)var->data - var->startdiff*nctypelen(var->dtype);
+	return NULL;
 }
 
 void nct_rm_dim(nct_var* var) {
@@ -2410,8 +2411,8 @@ nct_var* nct_set_timeend_str(nct_var *dim, const char *timestr, int beforeafter)
 }
 
 nct_var* nct_set_length(nct_var* dim, size_t arg) {
+	dim->enddiff += arg - dim->len;
 	dim->len = arg;
-	setrule(dim->super, nct_r_start); // start is used to mark length as well
 	nct_foreach(dim->super, var)
 		var->len = nct_get_len_from(var, 0);
 	return dim;
@@ -2437,21 +2438,19 @@ nct_var* nct_iterate_concatlist(nct_var* var) {
 	return from_concatlist(svar, iconcat-1);
 }
 
-nct_var* nct_set_rstart(nct_var* dim, long arg) {
-	long new = arg + dim->rule[nct_r_start].arg.lli;
-	return nct_set_start(dim, new);
-}
-
-nct_var* nct_set_start(nct_var* dim, size_t arg) {
-	long change = arg - dim->rule[nct_r_start].arg.lli; // new_start - old_start
-	dim->rule[nct_r_start].arg.lli = arg;
+nct_var* nct_set_rstart(nct_var* dim, long change) {
+	dim->startdiff += change;
 	dim->len -= change;
 	if (dim->data)
 		dim->data += change*nctypelen(dim->dtype);
-	setrule(dim->super, nct_r_start);
 	nct_foreach(dim->super, var)
 		var->len = nct_get_len_from(var, 0);
 	return dim;
+}
+
+nct_var* nct_set_start(nct_var* dim, size_t arg) {
+	long change = arg - dim->startdiff;
+	return nct_set_rstart(dim, change);
 }
 
 nct_var* nct_set_timestart_str(nct_var *dim, const char *timestr, int beforeafter) {
@@ -2470,7 +2469,7 @@ void nct_unlink_data(nct_var* var) {
 		if (var->dtype == NC_STRING && !(var->not_freeable & nct_ref_string))
 			for (int i=0; i<var->endpos - var->startpos; i++)
 				free(((char**)var->data)[i]);
-		free(nct_rewind(var)->data);
+		free(nct_rewinded_data(var));
 	}
 	if (var->nusers) {
 		if (!*var->nusers)

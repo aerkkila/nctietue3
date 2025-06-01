@@ -98,7 +98,7 @@ static size_t get_read_length(const nct_var* var) {
 		long omitted, omit0, omit1;
 		long flen = var->filedimensions[ndims-i-1];
 		const nct_var* dim = nct_get_vardim(var, var->ndims-i-1);
-		omit0 = dim->rule[nct_r_start].arg.lli;
+		omit0 = dim->startdiff;
 		if (omit0 >= flen)
 			omitted = flen;
 		else {
@@ -126,7 +126,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 	long add = get_read_length(var);
 
 	nct_var* dim0 = nct_get_vardim(var, 0);
-	long carried_dimstart = dim0->rule[nct_r_start].arg.lli - var->filedimensions[0];
+	long carried_dimstart = dim0->startdiff - var->filedimensions[0];
 	carried_dimstart *= (carried_dimstart > 0);
 
 	while (1) {
@@ -148,11 +148,11 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 		}
 
 		nct_var* dim0 = nct_get_vardim(cvar, 0);
-		long old_start = dim0->rule[nct_r_start].arg.lli;
+		long old_start = dim0->startdiff;
 		long old_length = cvar->len;
 		nct_set_start(dim0, old_start + carried_dimstart);
 		length_diff = old_length - cvar->len;
-		carried_dimstart = dim0->rule[nct_r_start].arg.lli - cvar->filedimensions[0];
+		carried_dimstart = dim0->startdiff - cvar->filedimensions[0];
 		carried_dimstart *= (carried_dimstart > 0);
 		if (carried_dimstart)
 			add = 0;
@@ -207,7 +207,7 @@ static size_t set_info(const nct_var* var, loadinfo_t* info, size_t startpos) {
 	}
 	for (int i=var->nfiledims-1; i>=0; i--) {
 		nct_var* dim = nct_get_vardim(var, i+n_extra);
-		info->fstart[i] = dim->rule[nct_r_start].arg.lli;
+		info->fstart[i] = dim->startdiff;
 		info->fcount[i] = MIN(var->filedimensions[i] - info->fstart[i], dim->len);
 	}
 	/* correct fstart and fcount with startpos */
@@ -287,7 +287,7 @@ static nct_var* load_coordinate_var(nct_var* var) {
 		var->capacity = len;
 	}
 	else if (var->capacity < len) {
-		var->data -= var->rule[nct_r_start].arg.lli * size1;
+		var->data -= var->startdiff * size1;
 		var->data = realloc(var->data, len*size1);
 		var->capacity = len;
 	}
@@ -296,7 +296,7 @@ static nct_var* load_coordinate_var(nct_var* var) {
 	perhaps_close_the_file(var);
 	var->startpos = 0;
 	var->endpos = var->len;
-	var->data += var->rule[nct_r_start].arg.lli * size1;
+	var->data += var->startdiff * size1;
 	return var;
 }
 

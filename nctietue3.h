@@ -23,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 5;
+static const int __nct_version_in_executable = 6;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -183,7 +183,7 @@ struct nct_fileinfo_mem_t {
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-	nct_r_start, nct_r_concat, nct_r_stream, nct_r_nrules,
+	nct_r_concat, nct_r_stream, nct_r_nrules,
 	/* The following rules are only boolean in bitmask, not in the array of rules. */
 	nct_r_mem, nct_r_list,
 } nct_rule_e;
@@ -215,6 +215,7 @@ struct nct_var {
 	nct_att*	atts;
 	size_t	len, capacity;
 	long	startpos, endpos; // if virtual file is loaded partially, from which to which index
+	long    startdiff, enddiff;
 	long	filedimensions[nct_maxdims]; // how much to read at maximum from the real file
 	nc_type	dtype;
 	char	not_freeable,

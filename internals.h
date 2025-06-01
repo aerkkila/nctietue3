@@ -30,21 +30,21 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 		nct_copy_att(var, src->atts+a);
 
 	/* Let's explicitely copy those rules which we know how to deal with. */
-	int known_rules = nct_r_start | nct_r_stream | nct_r_concat;
+	int known_rules = nct_r_stream | nct_r_concat;
 	if (anyrule(src, ~known_rules)) {
 		nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n",
 			src->name, nct_get_filename(src->super));
 	}
 	nct_link_stream(var, src); // handles nct_r_stream
 	/* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
-	var->rule[nct_r_start].arg.lli = src->rule[nct_r_start].arg.lli; // nct_r_start
+	var->startdiff = src->startdiff;
 
 	if (link > 0)
 		nct_link_data(var, src);
 	else if (link < 0)
 		var->data = NULL;
 	else if (src->data) {
-		long start = var->rule[nct_r_start].arg.lli,
+		long start = var->startdiff,
 			 size1 = nct_typelen[var->dtype];
 		int len = var->len + start;
 		var->data = malloc(len*size1);
