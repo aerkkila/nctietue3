@@ -23,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 4;
+static const int __nct_version_in_executable = 5;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -223,8 +223,6 @@ struct nct_var {
 	void*	data;
 	unsigned	rules; // a bitmask of rules which are in use
 	nct_rule	rule[nct_r_nrules];
-	int		stackbytes, stackcapasit;
-	void*	stack;
 	int     deflate; // compression level for nc_def_var_deflate. If > 0, shuffle = 1
 	char    load_async; // If true, nct_load returns immediatelly. User has to call pthread_join(this->loadthread, NULL).
 	pthread_t loadthread;
@@ -511,43 +509,6 @@ nct_anyd nct_timegm0_nofail(const nct_var* var, struct tm* tm); // Failing is no
 nct_anyd nct_mktime0(const nct_var* var, struct tm* tm);
 #define nct_mktime0g(set, name, tm) nct_mktime0(nct_get_var(set, name), tm)
 nct_anyd nct_mktime0_nofail(const nct_var* var, struct tm* tm); // Failing is not an error in this function.
-
-/*
- * Consider this loop which is meant to process the data 10 frames at the time and then skip 10 frames:
- *	nct_var* timevar = nct_get_vardim(var, 0).
- * 	for (int t=0; t<100; t+=20) {
- * 		nct_set_start(timevar, t);
- * 		nct_set_length(timevar 10); // must be called on each loop
- * 		nct_load(var);
- * 		do_stuff(var);
- * 	}
- *
- * If this should use the values in the time coordinate instead of indices, one may write:
- * 	for (int t=0; t<100; t+=20) {
- *		nct_set_start(timevar, 0);
- *		nct_set_start(timevar, nct_bsearch(timevar, t, 0)); // broken
- * 		nct_set_length(timevar 10);
- * 		nct_load(var);
- * 		do_stuff(var);
- * 	}
- *
- * The code above is broken because the length is set to 10 so anything beyond 10 is not found by nct_bsearch.
- * There may be easier ways around this in this simple example
- * but in a more complex program one may want to push and pop the real length of timevar:
- * 	for (int t=0; t<100; t+=20) {
- *		nct_set_start(timevar, 0);
- *		if (stack_not_empty(timevar))
- *			nct_set_length(timevar, nct_pop_integer(timevar));
- *		nct_push_integer(timevar, timevar->len);
- *		nct_set_start(timevar, nct_bsearch(timevar, t, 0));
- * 		nct_set_length(timevar 10);
- * 		nct_load(var);
- * 		do_stuff(var);
- * 	}
- */
-int		nct_stack_not_empty(const nct_var*);
-long long	nct_pop_integer(nct_var*);
-void		nct_push_integer(nct_var*, long long);
 
 /* Print functions load the necessary data.
    Hence, nct_set* or nct_var* is not constant. */
