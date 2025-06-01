@@ -9,7 +9,8 @@ typedef struct {
 	nct_ncget_t getfun_full;
 	long len_from_1; // how many data in a step in the first dimension
 	/* mutable variables */
-	size_t *fstart, *fcount, start;
+	size_t *fstart, *fcount;
+	long start, dim0startdiff;
 	/* restricted: only incremented at loading */
 	size_t pos;
 	void* data;
@@ -101,7 +102,7 @@ static int get_filenum(loadinfo_t *info, nct_var* var) {
 	if (var->concatlist.n == 0)
 		return 0;
 
-	long start_dim0 = info->start / info->len_from_1;
+	long start_dim0 = info->start / info->len_from_1 + info->dim0startdiff;
 	for (int ifile=0; ifile<var->concatlist.n; ifile++)
 		if (var->concatlist.coords[ifile][0] > start_dim0)
 			return ifile; // ifile-1 will be read
@@ -229,9 +230,9 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 
 	/* a variable from the concatlist */
 	nct_var* var1 = var->concatlist.list[filenum-1];
-	long start_var1 = var->concatlist.coords[filenum-1][0] * info->len_from_1;
-	long end_var1 = var->concatlist.coords[filenum-1][1] * info->len_from_1;
-	if (end_var1 - start_var1 != var1->len) {
+	long relstart_var1 = (var->concatlist.coords[filenum-1][0] - info->dim0startdiff) * info->len_from_1;
+	long relend_var1 = (var->concatlist.coords[filenum-1][1] - info->dim0startdiff) * info->len_from_1;
+	if (relend_var1 - relstart_var1 != var1->len) {
 		nct_puterror("concatvar size mismatch\n");
 		nct_return_error(-1);
 	}
@@ -241,7 +242,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	var1->capacity = len1;
 	var1->not_freeable = 1;
 	int nread;
-	long start1 = info->start - start_var1;
+	long start1 = info->start - relstart_var1;
 	_nct_load_partially_as(var1, start1, start1+len1, var->dtype, &nread);
 	if (var1->data != info->data) {
 		nct_puterror("jotain outoa");
@@ -342,6 +343,7 @@ static nct_var* _nct_load_partially_as(nct_var* var, long start, long end, nc_ty
 		.getfun	= nct_getfun_partial[var->dtype],
 		.getfun_full = nct_getfun[var->dtype],
 		.start	= start,
+		.dim0startdiff = nct_get_vardim(var, 0)->startdiff,
 		.len_from_1 = nct_get_len_from(var, 1),
 		.dtype  = dtype,
 	};

@@ -710,6 +710,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 				dim = find_corresponding_coord(srcdim, dest);
 			if (!dim) {
 				dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
+				dim->len_unlimited = srcdim->len_unlimited;
 				dim->freeable_name = 1;
 				nct_ensure_unique_name(dim);
 			}
@@ -2482,15 +2483,21 @@ void _set_length_concatlist(nct_var *var, nct_var *dim, long length) {
 		nct_set_length(dim1, length);
 	else {
 		/* the first dimension, concatenated in series */
-		long wantedpos = length + dim1->startdiff;
+		long wantedpos = length + dim->startdiff;
+		if (!var->concatlist.mem)
+			return;
+		if (var->concatlist.coords[0][0] >= wantedpos) {
+			var->concatlist.n = 0;
+			return;
+		}
 		for (int i=0; i<var->concatlist.mem; i++)
 			if (var->concatlist.coords[i][1] + var->concatlist.shortening[i] >= wantedpos) {
 				long *startend = var->concatlist.coords[i];
 				long newlen = wantedpos - startend[0];
-				int diff = newlen - startend[1];
+				int diff = wantedpos - startend[1];
 				var->concatlist.shortening[i] -= diff;
 				startend[1] = startend[0] + newlen;
-				var->concatlist.n = i;
+				var->concatlist.n = i+1;
 				nct_set_length_unlimited_dim(var->concatlist.list[i], newlen);
 				return;
 			}
@@ -2541,11 +2548,9 @@ nct_var* nct_set_rstart(nct_var* dim, long change) {
 			nct_var *dim1 = nct_get_dim(var->concatlist.super, dim->name);
 			if (!dim1)
 				continue;
-			if (dim->len != -1)
-				nct_set_rstart(dim1, change);
-			else {
-
-			}
+			if (dim1->len != -1)
+				nct_set_rstart(dim1, change); // concatenated in parallel
+			/* else concatenated is series, startdiff comes from concatlist.super */
 		}
 	}
 	return dim;

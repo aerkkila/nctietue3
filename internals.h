@@ -40,7 +40,7 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 	else if (src->data) {
 		long start = var->startdiff,
 			 size1 = nct_typelen[var->dtype];
-		int len = var->len + start;
+		long len = (var->len == -1 ? var->len_unlimited : var->len) + start;
 		var->data = malloc(len*size1);
 		memcpy(var->data, (char*)src->data-start*size1, len*size1);
 		var->data = (char*)var->data + start*size1;
