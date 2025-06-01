@@ -167,7 +167,7 @@ error: __attribute__((cold));
 }
 
 static void load_for_real(nct_var* var, loadinfo_t* info) {
-	if (hasrule(var, nct_r_stream))
+	if (var->stream)
 		return load_stream(var, info);
 	int ncid = perhaps_open_the_file(var);
 	if (var->nfiledims == 0)
@@ -269,7 +269,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 		return 0;
 	}
 	/* If this wasn't the first file, this function is called again to handle
-	   concatenation rules correctly on this file. */
+	   concatenation correctly on this file. */
 	nct_var* var1 = var->concatlist.list[filenum-1];
 	long old_start = info->start;
 	info->start = start_thisfile;
@@ -375,7 +375,7 @@ nct_var* nct_load_as(nct_var* var, nc_type dtype) {
 int nct_loadable(const nct_var* var) {
 	return
 		(var->ncid>=0 && ((var)->super->ncid > 0 || var->super->fileinfo || var->fileinfo)) ||
-		hasrule(var, nct_r_stream);
+		var->stream;
 }
 
 #undef MIN

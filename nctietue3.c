@@ -24,12 +24,6 @@ nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
 
 #define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
 
-/* uses private nct_set.rules */
-#define setrule(a, r) ((a)->rules |= 1<<(r))
-#define hasrule(a, r) ((a)->rules & 1<<(r))
-#define anyrule(a, r) ((a)->rules & (r))
-#define rmrule(a, r)  ((a)->rules &= ~(1<<(r)))
-
 #define startpass                     \
 	int __nct_err = nct_error_action; \
 if (nct_error_action == nct_auto)     \
@@ -1137,7 +1131,7 @@ void nct_free1(nct_set* set) {
 		nct_close_nc(&set->ncid);
 	endpass;
 	set->fileinfo = (_nct_unlink_fileinfo(set->fileinfo), NULL);
-	if hasrule(set, nct_r_list) {
+	if (set->islist) {
 		nct_set* ptr = set;
 		nct_set nullset = {0};
 		/* List contains structs and not pointers to them. Hence memcmp instead of while(++ptr). */
@@ -1386,7 +1380,7 @@ void set_stream_nusers_p(nct_var* var, int* ptr) {
 }
 
 int nct_link_stream(nct_var* dest, nct_var* src) {
-	if (!hasrule(src, nct_r_stream))
+	if (!src->stream)
 		return -1;
 	int* nusers = get_stream_nusers_p(src);
 	if (!nusers) {
@@ -1419,7 +1413,7 @@ static void perhaps_close_the_file(nct_var* var) {
 	else {
 		unsigned flags = ((struct nct_fileinfo_t*)var->super->fileinfo)->nct_readflags;
 		ncidp = flags & nct_rkeep ? NULL : &var->super->ncid;
-		if (hasrule(var->super, nct_r_mem))
+		if (var->super->inmem)
 			perhaps_free_the_content(var->super->fileinfo);
 	}
 	if (ncidp && *ncidp > 0)
@@ -1429,7 +1423,7 @@ static void perhaps_close_the_file(nct_var* var) {
 static void perhaps_close_the_file_set(nct_set* set) {
 	int *ncidp;
 	ncidp = ((struct nct_fileinfo_t*)set->fileinfo)->nct_readflags & nct_rkeep ? NULL : &set->ncid;
-	if (hasrule(set, nct_r_mem))
+	if (set->inmem)
 		perhaps_free_the_content(set->fileinfo);
 	if (ncidp && *ncidp > 0)
 		nct_close_nc(ncidp);
@@ -1484,7 +1478,7 @@ static int nct_open_mem(struct nct_fileinfo_mem_t* params) {
 #include "load_data.h" // nct_load_as
 
 FILE* nct_get_stream(const nct_var* var) {
-	return hasrule(var, nct_r_stream) ? var->rule[nct_r_stream].arg.v : NULL;
+	return var->stream;
 }
 
 /* uses private nct_set.fileinfo */
@@ -2011,7 +2005,7 @@ static nct_set* nct_read_ncf_lazy_gd(nct_set* dest, const void* vfile, int flags
 	};
 
 	if (flags & nct_rmem)
-		setrule(dest, nct_r_mem);
+		dest->inmem = 1;
 
 	dest->dims = calloc(dest->dimcapacity, sizeof(void*));
 	dest->vars = calloc(dest->varcapacity, sizeof(void*));
@@ -2097,7 +2091,7 @@ nct_set* nct_read_mfncf_ptr1(const char* filenames, int readflags, int nfiles, c
 	((struct nct_fileinfo_t*)set->fileinfo)->dirnamelen = dirnamelen;
 	int ind = 0;
 	nfiles--;
-	setrule(set, nct_r_list); // so that nct_free knows to free other members as well
+	set->islist = 1; // so that nct_free knows to free other members as well
 	ptr += strlen(ptr)+1;
 	if (!(readflags & nct_rcoordall)) {
 		readflags &= ~(nct_rcoord|nct_rcoordall);
@@ -2456,9 +2450,7 @@ nct_var* nct_set_timestart_str(nct_var *dim, const char *timestr, int beforeafte
 }
 
 void nct_set_stream(nct_var* var, FILE* f) {
-	setrule(var, nct_r_stream);
-	nct_rule* r = var->rule+nct_r_stream;
-	r->arg.v = f;
+	var->stream = f;
 }
 
 void nct_unlink_data(nct_var* var) {
@@ -2480,7 +2472,7 @@ void nct_unlink_data(nct_var* var) {
 }
 
 void nct_unlink_stream(nct_var* var) {
-	if (!hasrule(var, nct_r_stream))
+	if (!var->stream)
 		return;
 	int* nusers = get_stream_nusers_p(var);
 	if (!nusers || !*nusers) {
@@ -2489,7 +2481,7 @@ void nct_unlink_stream(nct_var* var) {
 	}
 	else
 		--*nusers;
-	rmrule(var, nct_r_stream);
+	var->stream = NULL;
 }
 
 enum {_createcoords=1<<0, _defonly=1<<1, _mutable=1<<2};

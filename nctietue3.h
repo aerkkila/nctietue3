@@ -23,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 7;
+static const int __nct_version_in_executable = 8;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -181,18 +181,6 @@ struct nct_fileinfo_mem_t {
 	void* (*getcontent)(const char* filename, size_t* size_out);
 };
 
-/* These are for internal use but nct_r_nrules is needed in this header. */
-typedef enum {
-	nct_r_stream, nct_r_nrules,
-	/* The following rules are only boolean in bitmask, not in the array of rules. */
-	nct_r_mem, nct_r_list,
-} nct_rule_e;
-typedef struct {
-	nct_any arg;
-	int n;		// if arg.v is list
-	int capacity;	// if arg.v is list
-} nct_rule;
-
 struct nct_att {
 	char*    name;
 	void*    value;
@@ -226,8 +214,7 @@ struct nct_var {
 		void **list;
 		int n, mem;
 	} concatlist;
-	unsigned	rules; // a bitmask of rules which are in use
-	nct_rule	rule[nct_r_nrules];
+	FILE    *stream;
 	int     deflate; // compression level for nc_def_var_deflate. If > 0, shuffle = 1
 	char    load_async; // If true, nct_load returns immediatelly. User has to call pthread_join(this->loadthread, NULL).
 	pthread_t loadthread;
@@ -245,7 +232,7 @@ struct nct_set {
 	int		ncid, owner;
 	/* private */
 	void*	fileinfo;	// either char* filename or struct nct_fileinfo_mem_t*
-	unsigned	rules;		// a bitmask of rules which are in use
+	char inmem, islist;
 };
 
 struct nct_anyd {
