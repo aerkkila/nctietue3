@@ -328,7 +328,7 @@ void nct_close_nc(int *ncid) {
 }
 
 void nct_allocate_varmem(nct_var* var) {
-	if (var->capacity >= var->len)
+	if (var->data && var->capacity >= var->len)
 		return;
 	nct_unlink_data(var);
 	var->data = malloc(var->len*nctypelen(var->dtype));

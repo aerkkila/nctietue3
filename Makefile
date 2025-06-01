@@ -1,6 +1,6 @@
 include config.mk
 
-libraries = -lnetcdf
+libraries = -pthread -lnetcdf
 
 ifdef have_proj
 	macros += -DHAVE_PROJ -D_GNU_SOURCE

@@ -7,6 +7,7 @@
 #include <stdio.h>	// stderr
 #include <regex.h>	// regmatch_t
 #include <stdint.h>	// intptr_t
+#include <pthread.h> // pthread_t
 
 typedef struct nct_set nct_set;
 typedef struct nct_var nct_var;
@@ -22,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 3;
+static const int __nct_version_in_executable = 4;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -225,6 +226,8 @@ struct nct_var {
 	int		stackbytes, stackcapasit;
 	void*	stack;
 	int     deflate; // compression level for nc_def_var_deflate. If > 0, shuffle = 1
+	char    load_async; // If true, nct_load returns immediatelly. User has to call pthread_join(this->loadthread, NULL).
+	pthread_t loadthread;
 	/* private */
 	struct nct_fileinfo_t*	fileinfo; // only used in some cases if different from this->super->fileinfo
 };

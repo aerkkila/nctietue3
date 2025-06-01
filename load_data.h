@@ -300,7 +300,32 @@ static nct_var* load_coordinate_var(nct_var* var) {
 	return var;
 }
 
+struct loadthread_args {
+	nct_var *var;
+	long start, end;
+	nc_type dtype;
+};
+
+static void* nct_load_async(void *vargs) {
+	struct loadthread_args *args = vargs;
+	args->var->load_async = 0;
+	void *ret = nct_load_partially_as(args->var, args->start, args->end, args->dtype);
+	args->var->load_async = 1;
+	free(vargs);
+	return ret;
+}
+
 nct_var* nct_load_partially_as(nct_var* var, long start, long end, nc_type dtype) {
+	if (var->load_async) {
+		struct loadthread_args *args = malloc(sizeof(args[0]));
+		args->var = var;
+		args->start = start;
+		args->end = end;
+		args->dtype = dtype;
+		pthread_create(&var->loadthread, NULL, nct_load_async, args);
+		return var;
+	}
+
 	if (!nct_loadable(var))
 		return NULL;
 	size_t fstart[nct_maxdims], fcount[nct_maxdims]; // start and count in a real file
