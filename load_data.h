@@ -121,7 +121,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 		else
 			goto error;
 	}
-	int ifile = 0, nfiles = var->rule[nct_r_concat].n + 1;
+	int ifile = 0, nfiles = var->concatlist.n + 1;
 	long length = 0, length_diff = 0;
 	long add = get_read_length(var);
 
@@ -139,7 +139,7 @@ static int get_filenum(long start, nct_var* var, int* ifile_out, size_t* start_o
 		length = new_length;
 		if (++ifile >= nfiles)
 			goto error;
-		nct_var* cvar = from_concatlist(var, ifile-1);
+		nct_var* cvar = var->concatlist.list[ifile-1];
 
 		if (!cvar->ndims) {
 			length_diff = 0;
@@ -270,7 +270,7 @@ static int next_load(nct_var* var, loadinfo_t* info) {
 	}
 	/* If this wasn't the first file, this function is called again to handle
 	   concatenation rules correctly on this file. */
-	nct_var* var1 = from_concatlist(var, filenum-1);
+	nct_var* var1 = var->concatlist.list[filenum-1];
 	long old_start = info->start;
 	info->start = start_thisfile;
 	while (!next_load(var1, info));

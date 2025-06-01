@@ -23,7 +23,7 @@ typedef void (*nct_fprint_t)(void*, const char*, ...);
    that requires programs to be recompiled, for example when structs are modified.
    Function nct_check_version checks before entering the main function that the two numbers match,
    that is the program was compiled with the same version than the library. */
-static const int __nct_version_in_executable = 6;
+static const int __nct_version_in_executable = 7;
 extern const int __nct_version_in_library;
 
 enum nct_timeunit {nct_milliseconds, nct_seconds, nct_minutes, nct_hours, nct_days, nct_len_timeunits};
@@ -183,7 +183,7 @@ struct nct_fileinfo_mem_t {
 
 /* These are for internal use but nct_r_nrules is needed in this header. */
 typedef enum {
-	nct_r_concat, nct_r_stream, nct_r_nrules,
+	nct_r_stream, nct_r_nrules,
 	/* The following rules are only boolean in bitmask, not in the array of rules. */
 	nct_r_mem, nct_r_list,
 } nct_rule_e;
@@ -222,6 +222,10 @@ struct nct_var {
 			not_to_write; // nct_create_nc and similar functions will define the variable but not call nc_put_var
 	int 	*nusers, *nusers_stream; // the first user is not counted
 	void*	data;
+	struct {
+		void **list;
+		int n, mem;
+	} concatlist;
 	unsigned	rules; // a bitmask of rules which are in use
 	nct_rule	rule[nct_r_nrules];
 	int     deflate; // compression level for nc_def_var_deflate. If > 0, shuffle = 1

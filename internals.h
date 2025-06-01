@@ -30,13 +30,13 @@ static nct_var* _nct_copy_var_internal(nct_var *var, nct_var *src, int link) {
 		nct_copy_att(var, src->atts+a);
 
 	/* Let's explicitely copy those rules which we know how to deal with. */
-	int known_rules = nct_r_stream | nct_r_concat;
+	int known_rules = nct_r_stream;
 	if (anyrule(src, ~known_rules)) {
 		nct_puterror("The program will likely crash due to some rule which can't be copied from variable %s (%s).\n",
 			src->name, nct_get_filename(src->super));
 	}
 	nct_link_stream(var, src); // handles nct_r_stream
-	/* Copied variables cannot be loaded in the normal way. Hence nct_r_concat need not to be handled. */
+	/* Copied variables cannot be loaded in the normal way. Hence concatenation is ignorede here. */
 	var->startdiff = src->startdiff;
 
 	if (link > 0)

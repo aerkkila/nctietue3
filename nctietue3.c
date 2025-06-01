@@ -21,7 +21,6 @@
 #define Max(a, b) ((a) > (b) ? a : (b))
 
 nct_var*	nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left);
-#define from_concatlist(var, num) (((nct_var**)(var)->rule[nct_r_concat].arg.v)[num])
 
 #define nct_rnoall (nct_rlazy | nct_rcoord) // if (nct_readflags & nct_rnoall) ...
 
@@ -695,7 +694,7 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	var->fileinfo = _nct_link_fileinfo(src->fileinfo ? src->fileinfo : src->super->fileinfo);
 	var->ncid = src->ncid;
 	var->nfiledims = src->nfiledims;
-	var->rule[nct_r_concat] = src->rule[nct_r_concat];
+	var->concatlist = src->concatlist;
 	memcpy(var->filedimensions, src->filedimensions, sizeof(var->filedimensions[0]) * var->nfiledims);
 	var->freeable_name = 1;
 	return _nct_copy_var_internal(var, src, link);
@@ -1101,8 +1100,8 @@ static void _nct_free_var(nct_var* var) {
 	var->capacity = 0;
 	if (var->freeable_name)
 		free(var->name);
-	if hasrule(var, nct_r_concat)
-		free(var->rule[nct_r_concat].arg.v);
+	free(var->concatlist.list);
+	memset(&var->concatlist, 0, sizeof(var->concatlist));
 	if (var->fileinfo)
 		_nct_unlink_fileinfo(var->fileinfo);
 	var->fileinfo = NULL;
@@ -2369,10 +2368,10 @@ void nct_rm_var(nct_var* var) {
 
 /* This uses static functions from load_data.h */
 nct_var* nct_update_concatlist(nct_var* var0) {
-	if (!hasrule(var0, nct_r_concat))
+	if (!(var0->concatlist.n))
 		return var0;
 	if (var0->len == 0) {
-		var0->rule[nct_r_concat].n = 0;
+		var0->concatlist.n = 0;
 		return var0;
 	}
 
@@ -2380,25 +2379,23 @@ nct_var* nct_update_concatlist(nct_var* var0) {
 	size_t start_trunc_new;
 	if (get_filenum(var0->len, var0, &fileno, &start_trunc_new))
 		return var0;
-	var0->rule[nct_r_concat].n = fileno - !start_trunc_new; // truncate the list
+	var0->concatlist.n = fileno - !start_trunc_new; // truncate the list
 	if (!start_trunc_new)
 		return var0;
 
-	nct_var* var1 = fileno ? from_concatlist(var0, fileno-1) : var0;
+	nct_var* var1 = fileno ? var0->concatlist.list[fileno-1] : var0;
 	nct_set_length(var1, start_trunc_new);
 	nct_update_concatlist(var1);
 	return var0;
 }
 
 nct_var* nct_set_concat(nct_var* var0, nct_var* var1, int howmany_left) {
-	setrule(var0, nct_r_concat);
-	nct_rule* r = var0->rule + nct_r_concat;
-	int size = r->n+1 + howmany_left; // how many var pointers will be put into the concatenation list
-	if(r->capacity < size) {
-		r->arg.v = realloc(r->arg.v, size*sizeof(void*));
-		r->capacity = size;
+	int size = var0->concatlist.n+1 + howmany_left; // how many var pointers will be put into the concatenation list
+	if (var0->concatlist.mem < size) {
+		var0->concatlist.list = realloc(var0->concatlist.list, size*sizeof(void*));
+		var0->concatlist.mem = size;
 	}
-	((nct_var**)r->arg.v)[r->n++] = var1;
+	((nct_var**)var0->concatlist.list)[var0->concatlist.n++] = var1;
 	var0->len += var1->len;
 	if (!var1->fileinfo)
 		var1->fileinfo = _nct_link_fileinfo(var1->super->fileinfo);
@@ -2429,13 +2426,13 @@ nct_var* nct_iterate_concatlist(nct_var* var) {
 	static nct_var* svar;
 	if (var) {
 		svar = var;
-		n_concat = !!hasrule(var, nct_r_concat) * var->rule[nct_r_concat].n;
+		n_concat = var->concatlist.n;
 		iconcat = 0;
 		return var;
 	}
 	if (iconcat++ >= n_concat)
 		return NULL;
-	return from_concatlist(svar, iconcat-1);
+	return svar->concatlist.list[iconcat-1];
 }
 
 nct_var* nct_set_rstart(nct_var* dim, long change) {
