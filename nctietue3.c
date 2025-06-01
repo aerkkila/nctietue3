@@ -690,7 +690,8 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 	for (int i=0; i<ndims; i++) {
 		nct_var* srcdim = nct_get_vardim(src, i);
 		dimids[i] = nct_get_dimid(dest, srcdim->name);
-		nct_var *dstdim = NULL;
+
+		/* unlimited dimension */
 		if (dimids[i] >= 0) {
 			dstdim = dest->dims[dimids[i]];
 			if (i==0 && dstdim->len == -1) {
@@ -702,21 +703,21 @@ nct_var* nct_copy_var(nct_set* dest, nct_var* src, int link) {
 					dstdim = NULL;
 			}
 		}
+
 		/* Create the dimension if not present in dest. */
 		/* Create a new dimension if lengths mismatch in source and destination. */
 		if (!dstdim) {
-			nct_var *dim = NULL;
 			if (dimids[i] >= 0)
-				dim = find_corresponding_coord(srcdim, dest);
-			if (!dim) {
-				dim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
-				dim->len_unlimited = srcdim->len_unlimited;
-				dim->freeable_name = 1;
-				nct_ensure_unique_name(dim);
+				dstdim = find_corresponding_coord(srcdim, dest);
+			if (!dstdim) {
+				dstdim = nct_add_dim(dest, srcdim->len, strdup(srcdim->name));
+				dstdim->len_unlimited = srcdim->len_unlimited;
+				dstdim->freeable_name = 1;
+				nct_ensure_unique_name(dstdim);
 			}
-			dimids[i] = nct_dimid(dim);
+			dimids[i] = nct_dimid(dstdim);
 		}
-		else if (nct_iscoord(srcdim) && !nct_iscoord(dstdim)) {
+		if (nct_iscoord(srcdim) && !nct_iscoord(dstdim)) {
 			dstdim = nct_dim2coord(dstdim, NULL, srcdim->dtype);
 			if (srcdim != src)
 				_nct_copy_var_internal(dstdim, srcdim, 0);
